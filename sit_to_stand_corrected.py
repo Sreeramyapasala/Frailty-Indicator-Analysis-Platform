@@ -143,14 +143,14 @@ def check_full_body(landmarks):
         mp_pose_global.PoseLandmark.LEFT_FOOT_INDEX,
         mp_pose_global.PoseLandmark.RIGHT_FOOT_INDEX,
     ]
-    VISIBLE_THRESHOLD = 0.6
+    VISIBLE_THRESHOLD = 0.4  # Lowered from 0.6 to be less strict on camera angle
     visible_count = sum(
         1 for kp in key_points
         if landmarks[kp.value].visibility > VISIBLE_THRESHOLD
     )
-    if visible_count == len(key_points):
+    if visible_count >= len(key_points) - 2:  # Allow up to 2 landmarks to be missed
         return True, "Full body detected"
-    return False, "Position yourself fully in camera view"
+    return False, "Step back so your full body is visible in camera"
 
 
 def check_sitting_position(landmarks):
@@ -164,7 +164,7 @@ def check_sitting_position(landmarks):
     avg_knee_y = (left_knee.y + right_knee.y) / 2
     hip_knee_distance = abs(avg_hip_y - avg_knee_y)
 
-    if hip_knee_distance < 0.09:
+    if hip_knee_distance < 0.15:  # Increased from 0.09 — easier to detect sitting
         return True, "Sitting position detected"
     return False, "Not sitting - please sit on edge of chair"
 
@@ -215,8 +215,13 @@ def check_leg_extended(landmarks):
     left_knee_angle  = calculate_angle_3d(lh, lk, la)
     right_knee_angle = calculate_angle_3d(rh, rk, ra)
 
-    ANGLE_THRESHOLD = 155
-    if left_knee_angle > ANGLE_THRESHOLD or right_knee_angle > ANGLE_THRESHOLD:
+    # Also check ankle Y vs knee Y for front-facing cameras
+    left_ankle_higher  = (lk.y - la.y) > 0.05
+    right_ankle_higher = (rk.y - ra.y) > 0.05
+
+    ANGLE_THRESHOLD = 130
+    if (left_knee_angle > ANGLE_THRESHOLD or right_knee_angle > ANGLE_THRESHOLD
+            or left_ankle_higher or right_ankle_higher):
         return True, "Leg is straight"
     return False, "Please extend one leg straight"
 
@@ -249,7 +254,7 @@ def check_hands_stacked(landmarks):
         (left_center.y - right_center.y)**2 +
         (left_center.z - right_center.z)**2
     )
-    if dist < 0.1:
+    if dist < 0.18:  # Increased from 0.1 — easier hands stacked detection
         return True, "Hands positioned correctly"
     return False, "Place one hand on top of the other"
 
@@ -287,8 +292,23 @@ def check_forward_reach(landmarks):
 
 
 # ─────────────────────────────────────────────────────────────────
-# SEQUENTIAL POSITION VERIFICATION (runs all 6 steps one by one)
+# SEQUENTIAL POSITION VERIFICATION (runs 3 steps for sit-to-stand)
 # ─────────────────────────────────────────────────────────────────
+def check_arms_crossed_verification(landmarks):
+    """Checks if arms are crossed on chest for sit-to-stand starting position."""
+    try:
+        ls = landmarks[mp_pose_global.PoseLandmark.LEFT_SHOULDER.value]
+        rs = landmarks[mp_pose_global.PoseLandmark.RIGHT_SHOULDER.value]
+        lw = landmarks[mp_pose_global.PoseLandmark.LEFT_WRIST.value]
+        rw = landmarks[mp_pose_global.PoseLandmark.RIGHT_WRIST.value]
+        sw = abs(ls.x - rs.x)
+        lw_to_rs = math.sqrt((lw.x - rs.x)**2 + (lw.y - rs.y)**2)
+        rw_to_ls = math.sqrt((rw.x - ls.x)**2 + (rw.y - ls.y)**2)
+        if lw_to_rs < sw * 1.2 and rw_to_ls < sw * 1.2:
+            return True, "Arms crossed correctly"
+        return False, "Please cross both arms on your chest"
+    except:
+        return False, "Please cross both arms on your chest"
 def run_position_verification(cap, pose, window_name="30-Second Chair Stand Test"):
     """
     Walks user through all 6 sit-and-reach positions sequentially.
