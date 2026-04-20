@@ -93,8 +93,8 @@ Week three marked a transition from independent research into collaborative deve
   - Planned architecture for integrating plain-language result summaries into the test completion workflow
 
 - **Responsibility Division Established:**
-  - Teammate → UX and visual interface
-  - Self → result messaging and output interpretation logic
+  - Teammate -> UX and visual interface
+  - Self -> result messaging and output interpretation logic
 
 ### What I Learned
 
@@ -118,7 +118,7 @@ Week three marked a transition from independent research into collaborative deve
 ## [February 9–13, 2026] - Week 4
 
 ### Summary
-This week involved consolidating role clarity and preparing for implementation. While active development was minimal, the week served an important organizational function — ensuring contribution boundaries were well-defined and implementation plans were aligned with project expectations.
+This week involved consolidating role clarity and preparing for implementation. While active development was minimal, the week served an important organizational function - ensuring contribution boundaries were well-defined and implementation plans were aligned with project expectations.
 
 ### Work Done
 
@@ -151,12 +151,12 @@ Development accelerated this week with the implementation of a cross-platform te
 
 ### Added
 
-- **Cross-Platform TTS System:** Developed `tts_final.py` — a complete MP3-based TTS implementation.
+- **Cross-Platform TTS System:** Developed `tts_final.py` - a complete MP3-based TTS implementation.
   - **Voice:** TTSMaker neural voice, consistent American female tone throughout
   - **Countdown audio:** `3.mp3`, `2.mp3`, `1.mp3`, `go.mp3`
   - **Instruction audio:** `instruction_sit.mp3`, `instruction_extend.mp3`, `instruction_hold.mp3`, `instruction_relax.mp3`
-  - **Storage:** 92 KB total — well within the 100 KB project constraint
-  - **Cost:** $0 — fully free solution
+  - **Storage:** 92 KB total - well within the 100 KB project constraint
+  - **Cost:** $0 - fully free solution
   - **Compatibility:** Pure MP3 playback works on Mac, Windows, and Linux
 
 ### Changed
@@ -168,7 +168,7 @@ Development accelerated this week with the implementation of a cross-platform te
 ### What I Learned
 
 - Gained practical experience evaluating TTS libraries (`pyttsx3`, `gTTS`, Web Speech API) against cross-platform, quality, and cost constraints.
-- Learned that dependency isolation — pre-generated MP3s vs. runtime synthesis — can significantly improve deployment portability.
+- Learned that dependency isolation - pre-generated MP3s vs. runtime synthesis - can significantly improve deployment portability.
 
 ### Challenges
 
@@ -189,7 +189,7 @@ This week focused on full integration of the TTS system into the primary noteboo
 ### Added
 
 - **Full End-to-End Test Verified:** Complete test run confirmed working.
-  - All 7 pipeline stages passed: `FULL_BODY_DETECTION` → `SITTING_CHECK` → `FOOT_FLAT_CHECK` → `LEG_EXTENDED_CHECK` → `HANDS_POSITION_CHECK` → `FORWARD_REACH` → `MEASUREMENT`
+  - All 7 pipeline stages passed: `FULL_BODY_DETECTION` -> `SITTING_CHECK` -> `FOOT_FLAT_CHECK` -> `LEG_EXTENDED_CHECK` -> `HANDS_POSITION_CHECK` -> `FORWARD_REACH` -> `MEASUREMENT`
   - Countdown working: 3-2-1-GO audio and visual overlay confirmed
 
 - **Video Countdown Integration:** Implemented countdown display system for the camera feed.
@@ -204,7 +204,7 @@ This week focused on full integration of the TTS system into the primary noteboo
 
 - **Audio Path:** Fixed hardcoded absolute path in Cell 4.
   - **Before:** `sys.path.append('/Users/hinalsachpara/Desktop/...')`
-  - **After:** `sys.path.append('.')` — works on any machine
+  - **After:** `sys.path.append('.')` - works on any machine
 
 - **Import Error (`cv2` not defined):** Documented correct cell execution order.
   - **Root cause:** Cell 1 (imports) was skipped before Cell 21 (main)
@@ -233,13 +233,13 @@ The development this week yielded two significant user experience enhancements: 
 
 ### Added
 
-- **Two-Screen Instruction Flow** — `show_instruction_screen()`
-  - **Screen 1:** Six-step text instructions on white background — stays for 15 seconds or until keypress
-  - **Screen 2:** Visual image guide (`merged_instruction.png`) — stays for 5 seconds or until keypress
+- **Two-Screen Instruction Flow** - `show_instruction_screen()`
+  - **Screen 1:** Six-step text instructions on white background - stays for 15 seconds or until keypress
+  - **Screen 2:** Visual image guide (`merged_instruction.png`) - stays for 5 seconds or until keypress
   - Camera does not open until instruction flow fully completes
-  - Image path uses `os.getcwd()` with hardcoded fallback — works on any machine
+  - Image path uses `os.getcwd()` with hardcoded fallback - works on any machine
 
-- **Error Detection System** — `show_error_message()`
+- **Error Detection System** - `show_error_message()`
   - Full-width red banner at top of camera feed, with state-specific messages:
     - No body detected: `"No body detected! Please step into the camera frame."`
     - `FULL_BODY_DETECTION`: `"Adjust camera! Make sure your full body is visible."`
@@ -258,11 +258,11 @@ The development this week yielded two significant user experience enhancements: 
 
   | Zone | Position |
   |---|---|
-  | Error / warning message | Top — full-width red bar |
-  | Instruction text | Below error — black background bar |
-  | Status message | Below instruction — centered |
+  | Error / warning message | Top - full-width red bar |
+  | Instruction text | Below error - black background bar |
+  | Status message | Below instruction - centered |
   | Camera feed | Middle of screen |
-  | 30-second timer | Bottom — black background bar |
+  | 30-second timer | Bottom - black background bar |
 
 ### Fixed
 
@@ -276,7 +276,7 @@ The development this week yielded two significant user experience enhancements: 
 
 ### What I Learned
 
-- Learned to design instruction flows that accommodate platform-specific windowing constraints — particularly macOS's refusal to grant keyboard focus to OpenCV windows in fullscreen mode.
+- Learned to design instruction flows that accommodate platform-specific windowing constraints - particularly macOS's refusal to grant keyboard focus to OpenCV windows in fullscreen mode.
 - Understood the UX importance of non-overlapping information zones for readability under real-world camera conditions.
 
 ### Challenges
@@ -299,7 +299,7 @@ This week involved significant refactoring of key validation functions and the i
 ### Added
 
 - **`HOLD_POSITION` State Wired in `main()`:** Was defined in the state machine but never validated.
-  - Reuses `check_forward_reach()` — shows "Hold still! Measuring..."
+  - Reuses `check_forward_reach()` - shows "Hold still! Measuring..."
   - 2-second hold required before advancing to `MEASUREMENT`
 
 - **`INHALE_PREPARATION` State Restored:** Was missing from the validation block in `main()`.
@@ -309,17 +309,17 @@ This week involved significant refactoring of key validation functions and the i
   - Camera opens immediately after instruction screens
   - Shows "Position yourself fully in the camera frame" until full body detected
   - Green "Perfect! Get ready..." confirmation for 2 seconds, then countdown fires
-  - `FULL_BODY_DETECTION` removed from test loop — handled in pre-countdown phase instead
+  - `FULL_BODY_DETECTION` removed from test loop - handled in pre-countdown phase instead
 
 ### Changed
 
 - **`check_hands_position()` Completely Rewritten:**
-  - **Root cause of failure:** Old 3D distance threshold `0.1` was physically unachievable — observed values ranged `0.50–0.72`
+  - **Root cause of failure:** Old 3D distance threshold `0.1` was physically unachievable - observed values ranged `0.50–0.72`
   - **New logic (Rikli & Jones protocol):** Wrist Y-difference `< 0.08`, wrist X-difference `< 0.25`, wrists below shoulders
   - **Impact:** 3 specific feedback messages; function now passes reliably
 
 - **`check_forward_reach()` Fixed:**
-  - **Root cause of failure:** `below_knee` check always returned `False` due to side-view camera angle — confirmed across 50-frame debug log
+  - **Root cause of failure:** `below_knee` check always returned `False` due to side-view camera angle - confirmed across 50-frame debug log
   - **Fix:** Removed unreliable check; now validates horizontal alignment only (`x_diff < 0.2` relative to extended ankle)
 
 - **Countdown Audio/Visual Sync Fixed:**
@@ -328,7 +328,7 @@ This week involved significant refactoring of key validation functions and the i
 
 ### What I Learned
 
-- Developed confidence in empirical threshold calibration — the importance of instrumenting code with debug output before assuming threshold values are valid.
+- Developed confidence in empirical threshold calibration - the importance of instrumenting code with debug output before assuming threshold values are valid.
 - Learned to design pose validation logic that accounts for camera angle constraints, a non-trivial consideration in monocular vision systems.
 
 ### Challenges
@@ -346,11 +346,11 @@ This week involved significant refactoring of key validation functions and the i
 ## [March 16–20, 2026] - Week 9
 
 ### Summary
-This week produced the result screen and timer pause/resume system — two features that complete the core user-facing functionality of the test. The work also included a significant UX decision: raw measurement values were removed from the user-facing display in favour of clinically meaningful categorical feedback.
+This week produced the result screen and timer pause/resume system - two features that complete the core user-facing functionality of the test. The work also included a significant UX decision: raw measurement values were removed from the user-facing display in favour of clinically meaningful categorical feedback.
 
 ### Added
 
-- **End Screen / Result Screen** — `show_result_screen()`
+- **End Screen / Result Screen** - `show_result_screen()`
   - **Trigger 1:** Fires when `TestState.COMPLETE` is reached
   - **Trigger 2:** Fires when 30-second timer hits 0 (safety net)
   - **Background:** Freezes last live camera frame, applies Gaussian blur `(55, 55)` with 65% dark overlay
@@ -364,11 +364,11 @@ This week produced the result screen and timer pause/resume system — two featu
   - Timer resumes automatically when user corrects position
   - **3-chance rule:** on 3rd position break, test fails and restarts from pre-countdown screen
   - `"PAUSED | Time: Xs"` displayed in orange when paused
-  - `"Position broken! Attempt X of 2 — correct position to resume"` shown in dark blue banner
+  - `"Position broken! Attempt X of 2 - correct position to resume"` shown in dark blue banner
 
 - **Camera Out-of-Frame Detection:**
   - Full body visibility check during test phase using existing `check_full_body()`
-  - Differentiates camera visibility issue from positional error — avoids misleading user feedback
+  - Differentiates camera visibility issue from positional error - avoids misleading user feedback
   - Both conditions trigger timer pause and count as a position break
 
 - **`reset_to_pre_countdown()` Function:** Clean, reusable reset covering all test state variables.
@@ -377,7 +377,7 @@ This week produced the result screen and timer pause/resume system — two featu
 
 ### Changed
 
-- **`measure_flexibility()` — Updated Category Logic:**
+- **`measure_flexibility()` - Updated Category Logic:**
   - New 3-category system based on Rikli & Jones protocol:
     - **Above Average:** fingertips past toes by more than 4 inches
     - **Average:** fingertips within 4 inches either side of toes
@@ -386,19 +386,19 @@ This week produced the result screen and timer pause/resume system — two featu
   - Result screen shows plain-English category and motivational message only
 
 - **Result Message Wording Clarified:**
-  - **Before:** `"Right leg: 3.9 in past toes."` — ambiguous
-  - **After:** `"Right leg: fingertips reached 3.9 inches beyond toes."` — clear and descriptive
+  - **Before:** `"Right leg: 3.9 in past toes."` - ambiguous
+  - **After:** `"Right leg: fingertips reached 3.9 inches beyond toes."` - clear and descriptive
 
 ### Fixed
 
 - **Fullscreen Instruction Screen Hanging:**
-  - **Root cause:** `cv2.waitKey()` stops responding in Mac fullscreen mode — macOS withholds keyboard focus from OpenCV windows
+  - **Root cause:** `cv2.waitKey()` stops responding in Mac fullscreen mode - macOS withholds keyboard focus from OpenCV windows
   - **Fix:** Removed all keypress detection from instruction screens; both screens now exit purely on time
   - Bottom bar text updated from `"Press any key..."` to `"Starting in 5 seconds..."`
 
 ### What I Learned
 
-- Understood the clinical rationale for categorical rather than raw numerical result display — reducing cognitive burden on elderly users and avoiding misinterpretation of precise decimal values.
+- Understood the clinical rationale for categorical rather than raw numerical result display - reducing cognitive burden on elderly users and avoiding misinterpretation of precise decimal values.
 - Gained experience designing stateful UI logic (pause/resume/restart) within a single-threaded OpenCV event loop.
 
 ### Challenges
@@ -408,8 +408,8 @@ This week produced the result screen and timer pause/resume system — two featu
 ### To Do (Next Steps)
 
 - [ ] Run 12 structured edge case tests and document pass/fail outcomes
-- [ ] Record Video 1 — clean full successful test run
-- [ ] Record Video 2 — interrupted test with pause/resume/restart
+- [ ] Record Video 1 - clean full successful test run
+- [ ] Record Video 2 - interrupted test with pause/resume/restart
 - [ ] Push final version to GitHub
 
 ---
@@ -431,7 +431,7 @@ Focus this week shifted to instruction refinement and system validation planning
 
 ### What I Learned
 
-- Reinforced understanding of the tension between informational completeness and cognitive load in instruction design — particularly for health applications targeting older adult users.
+- Reinforced understanding of the tension between informational completeness and cognitive load in instruction design - particularly for health applications targeting older adult users.
 - Learned how UI style guide constraints influence content decisions, not just visual presentation.
 
 ### Challenges
@@ -489,19 +489,19 @@ This week delivered the instruction screen implementation with multimedia suppor
 - **Instruction Screens with Multimedia Support:**
   - Basic and test instruction screens with visual guidance images and audio narration
   - Edge case handling integrated into the live camera feed:
-    - Poor lighting detected → on-screen warning message (test continues)
-    - Multiple people in frame → warning message displayed (test continues)
+    - Poor lighting detected -> on-screen warning message (test continues)
+    - Multiple people in frame -> warning message displayed (test continues)
 
 ### Changed
 
-- **Architecture Recommendation — Instruction Screen Migration:**
+- **Architecture Recommendation - Instruction Screen Migration:**
   - **Limitation identified:** OpenCV does not support custom fonts or CSS-based styling, preventing design system compliance
   - **Proposed solution:** Migrate instruction screens to an HTML/CSS-based interface executed prior to OpenCV camera initialisation
   - **Impact:** Enables full design system compliance while keeping the computer vision pipeline unchanged
 
 ### What I Learned
 
-- Developed a clearer understanding of the boundary between computer vision frameworks and frontend UI toolkits — and the trade-offs involved in using OpenCV for presentation-layer concerns.
+- Developed a clearer understanding of the boundary between computer vision frameworks and frontend UI toolkits - and the trade-offs involved in using OpenCV for presentation-layer concerns.
 - Gained experience in identifying architectural constraints early and proposing pragmatic, incremental migration strategies.
 
 ### Challenges
@@ -538,7 +538,7 @@ The final week of the work term was dedicated to comprehensive edge case testing
 
 - Developed practical competency in systematic software validation, particularly for computer vision systems that are sensitive to uncontrolled environmental variables.
 - Understood that rigorous documentation of both pass and fail cases is equally important in producing a trustworthy validation record.
-- Gained experience in collaborative documentation — ensuring that independently conducted tests produce a coherent, consistently formatted report.
+- Gained experience in collaborative documentation - ensuring that independently conducted tests produce a coherent, consistently formatted report.
 
 ### Challenges
 
