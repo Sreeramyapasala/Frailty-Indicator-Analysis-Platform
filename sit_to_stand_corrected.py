@@ -7,6 +7,78 @@ import os
 import sys
 import math
 
+# ─────────────────────────────────────────────────────────────────
+# PM STYLE GUIDE — BGR colors
+# ─────────────────────────────────────────────────────────────────
+C_PRIMARY    = (58,  107,  11)
+C_SECONDARY  = (74,  166,  16)
+C_BG         = (255, 255, 255)
+C_SURFACE    = (236, 244, 231)
+C_TEXT       = (31,   31,  31)
+C_MUTED      = (128, 114, 107)
+C_BORDER     = (217, 217, 217)
+C_WHITE      = (255, 255, 255)
+C_WARNING_BG = (0,   100, 200)
+C_DANGER_BG  = (0,    60, 180)
+C_ERROR      = (60,   80, 255)
+
+FH = cv2.FONT_HERSHEY_DUPLEX
+FB = cv2.FONT_HERSHEY_SIMPLEX
+
+
+# ─────────────────────────────────────────────────────────────────
+# STYLE HELPERS
+# ─────────────────────────────────────────────────────────────────
+def filled_rect(img, x1, y1, x2, y2, fill, border=None, thickness=2):
+    cv2.rectangle(img, (x1, y1), (x2, y2), fill, -1)
+    if border:
+        cv2.rectangle(img, (x1, y1), (x2, y2), border, thickness)
+
+
+def primary_button(img, x1, y1, x2, y2, text, font_scale=0.7):
+    filled_rect(img, x1, y1, x2, y2, C_SECONDARY, C_PRIMARY, 2)
+    tw, th = cv2.getTextSize(text, FH, font_scale, 1)[0]
+    cv2.putText(img, text,
+                (x1 + (x2-x1-tw)//2, y1 + (y2-y1+th)//2),
+                FH, font_scale, C_WHITE, 1)
+
+
+def secondary_button(img, x1, y1, x2, y2, text, font_scale=0.7):
+    filled_rect(img, x1, y1, x2, y2, C_BG, C_PRIMARY, 2)
+    tw, th = cv2.getTextSize(text, FH, font_scale, 1)[0]
+    cv2.putText(img, text,
+                (x1 + (x2-x1-tw)//2, y1 + (y2-y1+th)//2),
+                FH, font_scale, C_PRIMARY, 1)
+
+
+def status_chip(img, x, y, text, ok):
+    bg  = C_SECONDARY if ok else C_ERROR
+    bdr = C_PRIMARY   if ok else (30, 40, 180)
+    tw, th = cv2.getTextSize(text, FB, 0.55, 1)[0]
+    pad = 6
+    filled_rect(img, x, y, x+tw+pad*2, y+th+pad*2, bg, bdr, 1)
+    cv2.putText(img, text, (x+pad, y+th+pad), FB, 0.55, C_WHITE, 1)
+
+
+def progress_bar(img, x1, y, x2, frac, h=12):
+    filled_rect(img, x1, y, x2, y+h, C_BORDER)
+    if frac > 0:
+        filled_rect(img, x1, y,
+                    x1+int((x2-x1)*min(frac,1.0)), y+h, C_SECONDARY)
+
+
+def wrap_text(text, max_chars=55):
+    words = text.split()
+    lines, cur = [], ""
+    for w in words:
+        if len(cur)+len(w)+1 <= max_chars:
+            cur = (cur+" "+w).strip()
+        else:
+            if cur: lines.append(cur)
+            cur = w
+    if cur: lines.append(cur)
+    return lines
+
 
 # ─────────────────────────────────────────────────────────────────
 # AUDIO SETUP
@@ -14,123 +86,200 @@ import math
 sys.path.append('.')
 pygame.mixer.init()
 
-AUDIO_FILES = {
-    'countdown_3':      'audio/3.mp3',
-    'countdown_2':      'audio/2.mp3',
-    'countdown_1':      'audio/1.mp3',
-    'countdown_go':     'audio/go.mp3',
-    'instruction_sit':  'audio/instruction_sit.mp3',
-    'instruction_hold': 'audio/instruction_hold.mp3',
+def play_audio_nonblocking(key):
+    """Start playing audio without blocking. Returns True if started."""
+    path = AUDIO_MAP.get(key, '')
+    if not path or not os.path.exists(path):
+        print(f"[Audio] Missing: {key} -> {path}")
+        return False
+    try:
+        pygame.mixer.music.load(path)
+        pygame.mixer.music.play()
+        time.sleep(0.1)
+        return True
+    except Exception as e:
+        print(f"[Audio] Error: {e}")
+        return False
+
+def wait_for_key_or_audio_end(frame, win, timeout=30.0):
+    """
+    Show frame, wait until audio finishes OR user presses any key.
+    Returns True if skipped by keypress, False if audio finished naturally.
+    Does NOT use pygame.event.get() to avoid video system error.
+    """
+    start = time.time()
+    while time.time() - start < timeout:
+        cv2.imshow(win, frame)
+        k = cv2.waitKey(50)
+        if k != -1:
+            pygame.mixer.music.stop()
+            return True  # skipped
+        if not pygame.mixer.music.get_busy():
+            return False  # audio finished naturally
+    pygame.mixer.music.stop()
+    return False
+
+AUDIO_MAP = {
+    'basic_intro':    'audio/audiobasic_intro.mp3',
+    'basic_1':        'audio/audiobasic_1.mp3',
+    'basic_2':        'audio/audiobasic_2.mp3',
+    'basic_3':        'audio/audiobasic_3.mp3',
+    'basic_4':        'audio/audiobasic_4.mp3',
+    'basic_5':        'audio/audiobasic_5.mp3',
+    'basic_6':        'audio/audiobasic_6.mp3',
+    'basic_ready':    'audio/audiobasic_ready.mp3',
+    'test_intro':     'audio/audiotest_intro.mp3',
+    'test_1':         'audio/audiotest_1.mp3',
+    'test_2':         'audio/audiotest_2.mp3',
+    'test_3':         'audio/audiotest_3.mp3',
+    'test_4':         'audio/audiotest_4.mp3',
+    'test_5':         'audio/audiotest_5.mp3',
+    'test_6':         'audio/audiotest_6.mp3',
+    'test_7':         'audio/audiotest_7.mp3',
+    'test_confirmed': 'audio/audiotest_confirmed.mp3',
+    'countdown_3':    'audio/audiocountdown_3.mp3',
+    'countdown_2':    'audio/audiocountdown_2.mp3',
+    'countdown_1':    'audio/audiocountdown_1.mp3',
+    'countdown_go':   'audio/audiocountdown_go.mp3',
+    'test_complete':  'audio/audiotest_complete.mp3',
+    'test_stopped':   'audio/audiotest_stopped.mp3',
 }
 
-def play_audio(audio_key):
-    """Play an MP3 file by key. Silently skips if file not found."""
+def speak(key):
+    """Play an MP3 by key. Blocks until finished. Silently skips if missing."""
+    path = AUDIO_MAP.get(key, '')
+    if not path or not os.path.exists(path):
+        print(f"[Audio] Missing: {key} -> {path}")
+        return
     try:
-        path = AUDIO_FILES.get(audio_key, '')
-        if path and os.path.exists(path):
-            pygame.mixer.music.load(path)
-            pygame.mixer.music.play()
-            while pygame.mixer.music.get_busy():
-                time.sleep(0.05)
-        else:
-            print(f"[Audio] File not found for key: {audio_key}")
+        pygame.mixer.music.load(path)
+        pygame.mixer.music.play()
+        while pygame.mixer.music.get_busy():
+            time.sleep(0.05)
     except Exception as e:
-        print(f"[Audio] Playback error: {e}")
+        print(f"[Audio] Error: {e}")
 
 
 # ─────────────────────────────────────────────────────────────────
-# INSTRUCTION SCREEN
+# SCREEN 1 — BASIC INSTRUCTIONS
 # ─────────────────────────────────────────────────────────────────
-def show_instruction_screen():
-    """Show two-screen instruction display before the test starts."""
+BASIC_INSTRUCTIONS = [
+    "Find a bright, quiet spot! Good lighting helps the camera see you clearly.",
+    "Avoid distractions! No phone calls, deliveries, or interruptions during the test.",
+    "Check that your camera is on, working and clearly focused. Place your laptop or camera in a stable position and do not hold it in your hand.",
+    "Stay in the camera frame the whole time. Make sure you don't move out of view!",
+    "Wear comfortable and fitted clothing so your body movements are clearly visible.",
+    "Clear the space around you. Make sure there is enough room to move freely!",
+]
 
-    # Screen 1: Text Instructions
-    text_screen = np.ones((720, 1280, 3), dtype=np.uint8) * 255
-    cv2.putText(text_screen, "30-Second Chair Stand Test - Instructions",
-                (50, 70), cv2.FONT_HERSHEY_DUPLEX, 1.2, (30, 60, 150), 2)
-    cv2.line(text_screen, (50, 110), (1230, 110), (30, 60, 150), 2)
+def show_basic_instructions(image_path="basic_instructions.png"):
+    WIN = "Before You Start"
+    cv2.namedWindow(WIN, cv2.WINDOW_NORMAL)
+    cv2.setWindowProperty(WIN, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
-    instructions = [
-        "1. Sit in the MIDDLE of the chair, back straight",
-        "2. Cross BOTH arms on your chest",
-        "3. Make sure your KNEES are visible to the camera",
-        "4. On GO - stand up FULLY, then sit back down",
-        "5. Repeat as many times as possible in 30 seconds",
-        "6. Do NOT use your arms to push yourself up",
-    ]
-    y = 180
-    for line in instructions:
-        cv2.putText(text_screen, line,
-                    (50, y), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (50, 50, 50), 2)
-        y += 80
+    img = cv2.imread(os.path.join(os.getcwd(), image_path))
+    if img is None:
+        print(f"[Info] {image_path} not found — text fallback.")
+        img = np.ones((720, 1280, 3), dtype=np.uint8) * 255
+        filled_rect(img, 0, 0, 1280, 80, C_PRIMARY)
+        cv2.putText(img, "Before You Start", (40, 54), FH, 1.4, C_WHITE, 2)
+        y = 100
+        for i, line in enumerate(BASIC_INSTRUCTIONS, 1):
+            card = C_SURFACE if i % 2 == 0 else C_BG
+            filled_rect(img, 30, y, 1250, y+75, card, C_BORDER, 1)
+            filled_rect(img, 40, y+16, 78, y+54, C_SECONDARY)
+            cv2.putText(img, str(i), (50, y+44), FH, 0.75, C_WHITE, 1)
+            ty = y + 32
+            for wl in wrap_text(line, 90):
+                cv2.putText(img, wl, (92, ty), FB, 0.72, C_TEXT, 1)
+                ty += 26
+            y += 90
 
-    cv2.rectangle(text_screen, (0, 640), (1280, 720), (30, 60, 150), -1)
-    cv2.putText(text_screen,
-                "Study the steps carefully - press any key or wait 15 seconds...",
-                (150, 690), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+    img = cv2.resize(img, (1280, 720))
 
-    cv2.imshow('Instructions', text_screen)
-    start = time.time()
-    while time.time() - start < 15.0:
-        if cv2.waitKey(1) != -1:
-            break
+    # show image first, then play intro
+    cv2.imshow(WIN, img)
+    cv2.waitKey(1)
+    play_audio_nonblocking('basic_intro')
+    wait_for_key_or_audio_end(img, WIN)
 
-    # Screen 2: Image guide
-    image_path = os.path.join(os.getcwd(), "merged_instruction.png")
-    instruction_img = cv2.imread(image_path)
-    if instruction_img is not None:
-        instruction_img = cv2.resize(instruction_img, (1280, 720))
-        cv2.rectangle(instruction_img, (0, 640), (1280, 720), (0, 0, 0), -1)
-        cv2.putText(instruction_img,
-                    "Press any key to start or wait 5 seconds...",
-                    (350, 690), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
-        cv2.imshow('Instructions', instruction_img)
-        start = time.time()
-        while time.time() - start < 5.0:
-            if cv2.waitKey(1) != -1:
-                break
-    else:
-        print("[Info] merged_instruction.png not found — skipping image screen.")
+    audio_keys = ['basic_1','basic_2','basic_3','basic_4','basic_5','basic_6']
+    for i, key in enumerate(audio_keys, 1):
+        display = img.copy()
+        filled_rect(display, 0, 648, 1280, 720, C_PRIMARY)
+        progress_bar(display, 20, 655, 1260, i/len(audio_keys), h=10)
+        cv2.putText(display,
+                    f"Instruction {i} of {len(audio_keys)}  press any key to skip",
+                    (40, 700), FB, 0.72, C_WHITE, 1)
+        cv2.imshow(WIN, display)
+        cv2.waitKey(1)
 
-    cv2.destroyAllWindows()
+        play_audio_nonblocking(key)
+        skipped = wait_for_key_or_audio_end(display, WIN)
+
+        # brief pause between instructions only if not skipped
+        if not skipped:
+            deadline = time.time() + 0.8
+            while time.time() < deadline:
+                cv2.imshow(WIN, display)
+                if cv2.waitKey(50) != -1:
+                    break
+
+    # final screen
+    final = img.copy()
+    filled_rect(final, 0, 648, 1280, 720, C_PRIMARY)
+    progress_bar(final, 20, 655, 1260, 1.0, h=10)
+    primary_button(final, 380, 660, 900, 710,
+                   "Press any key to continue", 0.65)
+    cv2.imshow(WIN, final)
+    cv2.waitKey(1)
+    play_audio_nonblocking('basic_ready')
+    wait_for_key_or_audio_end(final, WIN, timeout=8.0)
+
+    cv2.destroyWindow(WIN)
     time.sleep(0.5)
-    print("Instructions done!")
+    print("Basic instructions done!")
 
 
 # ─────────────────────────────────────────────────────────────────
 # AUDIBLE COUNTDOWN
 # ─────────────────────────────────────────────────────────────────
 def play_audible_countdown(cap, window_name="30-Second Chair Stand Test"):
-    """Show 3-2-1-GO on camera feed AND play audio for each number."""
-    audio_keys = ['countdown_3', 'countdown_2', 'countdown_1', 'countdown_go']
-    messages   = ["Get Ready: 3", "Get Ready: 2", "Get Ready: 1", "GO!"]
+    keys   = ['countdown_3','countdown_2','countdown_1','countdown_go']
+    labels = ["3", "2", "1", "GO!"]
+    colors = [C_MUTED, C_MUTED, C_SECONDARY, C_PRIMARY]
 
     for step in range(4):
-        play_audio(audio_keys[step])
+        speak(keys[step])
         deadline = time.time() + 1.5
         while time.time() < deadline:
             ret, frame = cap.read()
-            if not ret:
-                continue
+            if not ret: continue
             frame = cv2.flip(frame, 1)
-            txt  = messages[step]
-            size = cv2.getTextSize(txt, cv2.FONT_HERSHEY_DUPLEX, 3, 4)[0]
-            tx   = (frame.shape[1] - size[0]) // 2
-            ty   = (frame.shape[0] + size[1]) // 2
-            cv2.putText(frame, txt, (tx, ty),
-                        cv2.FONT_HERSHEY_DUPLEX, 3, (0, 255, 0), 6)
+            h, w  = frame.shape[:2]
+            overlay = frame.copy()
+            cv2.rectangle(overlay, (0,0), (w,h), (20,20,20), -1)
+            cv2.addWeighted(overlay, 0.45, frame, 0.55, 0, frame)
+            txt  = labels[step]
+            size = cv2.getTextSize(txt, FH, 5, 6)[0]
+            tx   = (w - size[0]) // 2
+            ty   = (h + size[1]) // 2
+            cv2.putText(frame, txt, (tx+3, ty+3), FH, 5, C_TEXT, 6)
+            cv2.putText(frame, txt, (tx, ty),     FH, 5, colors[step], 6)
+            sub = "GET READY" if step < 3 else "START NOW!"
+            sw2 = cv2.getTextSize(sub, FB, 0.9, 2)[0]
+            cv2.putText(frame, sub, ((w-sw2[0])//2, ty+60), FB, 0.9, C_WHITE, 2)
             cv2.imshow(window_name, frame)
             cv2.waitKey(1)
 
 
 # ─────────────────────────────────────────────────────────────────
-# POSITION VERIFICATION FUNCTIONS (from friend's sit-and-reach code)
-# Added here — not in your original
+# POSE CHECK FUNCTIONS
 # ─────────────────────────────────────────────────────────────────
 mp_pose_global = mp.solutions.pose
 
+
 def check_full_body(landmarks):
-    """Ensure the full person is detected before starting test."""
     key_points = [
         mp_pose_global.PoseLandmark.LEFT_SHOULDER,
         mp_pose_global.PoseLandmark.RIGHT_SHOULDER,
@@ -143,261 +292,374 @@ def check_full_body(landmarks):
         mp_pose_global.PoseLandmark.LEFT_FOOT_INDEX,
         mp_pose_global.PoseLandmark.RIGHT_FOOT_INDEX,
     ]
-    VISIBLE_THRESHOLD = 0.4  # Lowered from 0.6 to be less strict on camera angle
-    visible_count = sum(
-        1 for kp in key_points
-        if landmarks[kp.value].visibility > VISIBLE_THRESHOLD
-    )
-    if visible_count >= len(key_points) - 2:  # Allow up to 2 landmarks to be missed
+    visible = sum(1 for kp in key_points
+                  if landmarks[kp.value].visibility > 0.4)
+    if visible >= len(key_points) - 2:
         return True, "Full body detected"
-    return False, "Step back so your full body is visible in camera"
+    return False, "Step back so full body is visible in camera"
 
 
-def check_sitting_position(landmarks):
-    """Check if person is sitting based on hip and knee Y positions."""
-    left_hip   = landmarks[mp_pose_global.PoseLandmark.LEFT_HIP.value]
-    right_hip  = landmarks[mp_pose_global.PoseLandmark.RIGHT_HIP.value]
-    left_knee  = landmarks[mp_pose_global.PoseLandmark.LEFT_KNEE.value]
-    right_knee = landmarks[mp_pose_global.PoseLandmark.RIGHT_KNEE.value]
-
-    avg_hip_y  = (left_hip.y  + right_hip.y)  / 2
-    avg_knee_y = (left_knee.y + right_knee.y) / 2
-    hip_knee_distance = abs(avg_hip_y - avg_knee_y)
-
-    if hip_knee_distance < 0.15:  # Increased from 0.09 — easier to detect sitting
-        return True, "Sitting position detected"
-    return False, "Not sitting - please sit on edge of chair"
+def _check_seated(landmarks):
+    lh = landmarks[mp_pose_global.PoseLandmark.LEFT_HIP.value].y
+    rh = landmarks[mp_pose_global.PoseLandmark.RIGHT_HIP.value].y
+    lk = landmarks[mp_pose_global.PoseLandmark.LEFT_KNEE.value].y
+    rk = landmarks[mp_pose_global.PoseLandmark.RIGHT_KNEE.value].y
+    hip_y  = (lh+rh)/2
+    knee_y = (lk+rk)/2
+    if knee_y > hip_y+0.02 and abs(hip_y-knee_y) < 0.20:
+        return True, "Good — sitting position detected"
+    return False, "Please sit on the front edge of the chair"
 
 
-def check_foot_flat_on_floor(landmarks):
-    """Checks if at least one foot is flat on the floor."""
-    Y_TOL = 0.06
-
-    def foot_flat(heel, toe):
-        return abs(heel.y - toe.y) < Y_TOL
-
-    left_flat = foot_flat(
-        landmarks[mp_pose_global.PoseLandmark.LEFT_HEEL.value],
-        landmarks[mp_pose_global.PoseLandmark.LEFT_FOOT_INDEX.value]
-    )
-    right_flat = foot_flat(
-        landmarks[mp_pose_global.PoseLandmark.RIGHT_HEEL.value],
-        landmarks[mp_pose_global.PoseLandmark.RIGHT_FOOT_INDEX.value]
-    )
-
-    if left_flat or right_flat:
-        return True, "Foot is flat on the floor"
-    return False, "Please place one foot flat on the floor"
+def _check_feet_flat(landmarks):
+    Y_TOL = 0.07
+    def flat(heel, toe):
+        return abs(landmarks[heel.value].y - landmarks[toe.value].y) < Y_TOL
+    L = flat(mp_pose_global.PoseLandmark.LEFT_HEEL,
+             mp_pose_global.PoseLandmark.LEFT_FOOT_INDEX)
+    R = flat(mp_pose_global.PoseLandmark.RIGHT_HEEL,
+             mp_pose_global.PoseLandmark.RIGHT_FOOT_INDEX)
+    if L and R: return True, "Good — both feet flat on the floor"
+    if L or R:  return True, "Good — at least one foot flat on the floor"
+    return False, "Please place both feet flat on the floor, shoulder-width apart"
 
 
-def calculate_angle_3d(a, b, c):
-    """Calculates the angle at point b in 3D given points a, b, c."""
-    ba = (a.x - b.x, a.y - b.y, a.z - b.z)
-    bc = (c.x - b.x, c.y - b.y, c.z - b.z)
-    dot_product = ba[0]*bc[0] + ba[1]*bc[1] + ba[2]*bc[2]
-    mag_ba = math.sqrt(ba[0]**2 + ba[1]**2 + ba[2]**2)
-    mag_bc = math.sqrt(bc[0]**2 + bc[1]**2 + bc[2]**2)
-    if mag_ba == 0 or mag_bc == 0:
-        return 0
-    angle_rad = math.acos(max(min(dot_product / (mag_ba * mag_bc), 1.0), -1.0))
-    return math.degrees(angle_rad)
-
-
-def check_leg_extended(landmarks):
-    """Checks if either leg is straight using 3D hip-knee-ankle angle."""
-    lh = landmarks[mp_pose_global.PoseLandmark.LEFT_HIP.value]
-    lk = landmarks[mp_pose_global.PoseLandmark.LEFT_KNEE.value]
-    la = landmarks[mp_pose_global.PoseLandmark.LEFT_ANKLE.value]
-    rh = landmarks[mp_pose_global.PoseLandmark.RIGHT_HIP.value]
-    rk = landmarks[mp_pose_global.PoseLandmark.RIGHT_KNEE.value]
-    ra = landmarks[mp_pose_global.PoseLandmark.RIGHT_ANKLE.value]
-
-    left_knee_angle  = calculate_angle_3d(lh, lk, la)
-    right_knee_angle = calculate_angle_3d(rh, rk, ra)
-
-    # Also check ankle Y vs knee Y for front-facing cameras
-    left_ankle_higher  = (lk.y - la.y) > 0.05
-    right_ankle_higher = (rk.y - ra.y) > 0.05
-
-    ANGLE_THRESHOLD = 130
-    if (left_knee_angle > ANGLE_THRESHOLD or right_knee_angle > ANGLE_THRESHOLD
-            or left_ankle_higher or right_ankle_higher):
-        return True, "Leg is straight"
-    return False, "Please extend one leg straight"
-
-
-def hand_center(hand_landmarks):
-    """Calculate 3D center of wrist, index, and pinky."""
-    x = (hand_landmarks[0].x + hand_landmarks[1].x + hand_landmarks[2].x) / 3
-    y = (hand_landmarks[0].y + hand_landmarks[1].y + hand_landmarks[2].y) / 3
-    z = (hand_landmarks[0].z + hand_landmarks[1].z + hand_landmarks[2].z) / 3
-    return type('Point', (object,), {'x': x, 'y': y, 'z': z})()
-
-
-def check_hands_stacked(landmarks):
-    """Checks if one hand is on top of the other."""
-    left_landmarks = [
-        landmarks[mp_pose_global.PoseLandmark.LEFT_WRIST.value],
-        landmarks[mp_pose_global.PoseLandmark.LEFT_INDEX.value],
-        landmarks[mp_pose_global.PoseLandmark.LEFT_PINKY.value]
-    ]
-    right_landmarks = [
-        landmarks[mp_pose_global.PoseLandmark.RIGHT_WRIST.value],
-        landmarks[mp_pose_global.PoseLandmark.RIGHT_INDEX.value],
-        landmarks[mp_pose_global.PoseLandmark.RIGHT_PINKY.value]
-    ]
-    left_center  = hand_center(left_landmarks)
-    right_center = hand_center(right_landmarks)
-
-    dist = math.sqrt(
-        (left_center.x - right_center.x)**2 +
-        (left_center.y - right_center.y)**2 +
-        (left_center.z - right_center.z)**2
-    )
-    if dist < 0.18:  # Increased from 0.1 — easier hands stacked detection
-        return True, "Hands positioned correctly"
-    return False, "Place one hand on top of the other"
-
-
-def check_forward_reach(landmarks):
-    """Check if the person is reaching forward toward the extended foot."""
-    lw = landmarks[mp_pose_global.PoseLandmark.LEFT_WRIST.value]
-    rw = landmarks[mp_pose_global.PoseLandmark.RIGHT_WRIST.value]
-    hand_y = (lw.y + rw.y) / 2
-    hand_x = (lw.x + rw.x) / 2
-
-    lk = landmarks[mp_pose_global.PoseLandmark.LEFT_KNEE.value]
-    rk = landmarks[mp_pose_global.PoseLandmark.RIGHT_KNEE.value]
-    la = landmarks[mp_pose_global.PoseLandmark.LEFT_ANKLE.value]
-    ra = landmarks[mp_pose_global.PoseLandmark.RIGHT_ANKLE.value]
-
-    left_knee_angle  = calculate_angle_3d(
-        landmarks[mp_pose_global.PoseLandmark.LEFT_HIP.value], lk, la)
-    right_knee_angle = calculate_angle_3d(
-        landmarks[mp_pose_global.PoseLandmark.RIGHT_HIP.value], rk, ra)
-
-    if left_knee_angle > right_knee_angle:
-        extended_ankle = la
-        extended_knee  = lk
-    else:
-        extended_ankle = ra
-        extended_knee  = rk
-
-    hands_below_knee = hand_y > extended_knee.y
-    hands_near_foot  = abs(hand_x - extended_ankle.x) < 0.2
-
-    if hands_below_knee and hands_near_foot:
-        return True, "Reaching forward toward extended leg"
-    return False, "Reach forward toward your extended foot"
-
-
-# ─────────────────────────────────────────────────────────────────
-# SEQUENTIAL POSITION VERIFICATION (runs 3 steps for sit-to-stand)
-# ─────────────────────────────────────────────────────────────────
-def check_arms_crossed_verification(landmarks):
-    """Checks if arms are crossed on chest for sit-to-stand starting position."""
+def _check_arms_crossed(landmarks):
     try:
         ls = landmarks[mp_pose_global.PoseLandmark.LEFT_SHOULDER.value]
         rs = landmarks[mp_pose_global.PoseLandmark.RIGHT_SHOULDER.value]
         lw = landmarks[mp_pose_global.PoseLandmark.LEFT_WRIST.value]
         rw = landmarks[mp_pose_global.PoseLandmark.RIGHT_WRIST.value]
         sw = abs(ls.x - rs.x)
-        lw_to_rs = math.sqrt((lw.x - rs.x)**2 + (lw.y - rs.y)**2)
-        rw_to_ls = math.sqrt((rw.x - ls.x)**2 + (rw.y - ls.y)**2)
-        if lw_to_rs < sw * 1.2 and rw_to_ls < sw * 1.2:
-            return True, "Arms crossed correctly"
-        return False, "Please cross both arms on your chest"
+        if (math.sqrt((lw.x-rs.x)**2+(lw.y-rs.y)**2) < sw*1.2 and
+                math.sqrt((rw.x-ls.x)**2+(rw.y-ls.y)**2) < sw*1.2):
+            return True, "Good — arms crossed correctly"
+        return False, "Please cross both arms firmly over your chest"
     except:
-        return False, "Please cross both arms on your chest"
-def run_position_verification(cap, pose, window_name="30-Second Chair Stand Test"):
-    """
-    Walks user through all 6 sit-and-reach positions sequentially.
-    Each step must be held for 2 seconds to advance.
-    Returns True when all steps pass, False if user presses Q.
-    """
-    steps = [
-        ("Step 1: Position yourself fully in camera view",
-             check_full_body),
-        ("Step 2: Sit on the edge of the chair",
-             check_sitting_position),
-        ("Step 3: Place one foot flat on the floor",
-             check_foot_flat_on_floor),
-        ("Step 4: Extend one leg straight forward",
-             check_leg_extended),
-        ("Step 5: Place one hand on top of the other",
-             check_hands_stacked),
-        ("Step 6: Reach forward toward your extended foot",
-             check_forward_reach),
-    ]
+        return False, "Please cross both arms firmly over your chest"
 
-    current_step = 0
-    step_pass_start = None
 
-    while current_step < len(steps):
-        ret, frame = cap.read()
-        if not ret:
-            continue
+def _calc_angle(a, b, c):
+    ba = (a.x-b.x, a.y-b.y, a.z-b.z)
+    bc = (c.x-b.x, c.y-b.y, c.z-b.z)
+    dot = sum(ba[i]*bc[i] for i in range(3))
+    mag = math.sqrt(sum(x**2 for x in ba))*math.sqrt(sum(x**2 for x in bc))
+    if mag == 0: return 0
+    return math.degrees(math.acos(max(min(dot/mag, 1.0), -1.0)))
 
-        frame   = cv2.flip(frame, 1)
-        results = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
-        instruction, check_fn = steps[current_step]
-        check_passed   = False
-        status_message = ""
+def _check_full_stand(landmarks):
+    lh = landmarks[mp_pose_global.PoseLandmark.LEFT_HIP.value]
+    lk = landmarks[mp_pose_global.PoseLandmark.LEFT_KNEE.value]
+    la = landmarks[mp_pose_global.PoseLandmark.LEFT_ANKLE.value]
+    rh = landmarks[mp_pose_global.PoseLandmark.RIGHT_HIP.value]
+    rk = landmarks[mp_pose_global.PoseLandmark.RIGHT_KNEE.value]
+    ra = landmarks[mp_pose_global.PoseLandmark.RIGHT_ANKLE.value]
+    sh_y  = (landmarks[mp_pose_global.PoseLandmark.LEFT_SHOULDER.value].y +
+             landmarks[mp_pose_global.PoseLandmark.RIGHT_SHOULDER.value].y)/2
+    hip_y = (lh.y+rh.y)/2
+    kn_y  = (lk.y+rk.y)/2
+    torso = abs(sh_y - hip_y)
+    if ((_calc_angle(lh,lk,la) > 155 or _calc_angle(rh,rk,ra) > 155) and
+            hip_y < kn_y - torso*0.25):
+        return True, "Good — fully upright position"
+    return False, "Stand up FULLY — hips and knees straight"
 
-        if results.pose_landmarks:
-            landmarks    = results.pose_landmarks.landmark
-            check_passed, status_message = check_fn(landmarks)
-        else:
-            status_message = "No body detected! Step into the camera frame."
 
-        # ── Progress bar showing how many steps done ──
-        total = len(steps)
-        bar_w = int((frame.shape[1] - 40) * (current_step / total))
-        cv2.rectangle(frame, (20, frame.shape[0]-30),
-                      (frame.shape[1]-20, frame.shape[0]-10), (50,50,50), -1)
-        cv2.rectangle(frame, (20, frame.shape[0]-30),
-                      (20 + bar_w, frame.shape[0]-10), (0,200,0), -1)
-        cv2.putText(frame, f"Step {current_step+1} of {total}",
-                    (20, frame.shape[0]-35),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,255,255), 1)
+def _check_no_arm_push(landmarks):
+    lw = landmarks[mp_pose_global.PoseLandmark.LEFT_WRIST.value]
+    rw = landmarks[mp_pose_global.PoseLandmark.RIGHT_WRIST.value]
+    lh = landmarks[mp_pose_global.PoseLandmark.LEFT_HIP.value]
+    rh = landmarks[mp_pose_global.PoseLandmark.RIGHT_HIP.value]
+    ls = landmarks[mp_pose_global.PoseLandmark.LEFT_SHOULDER.value]
+    rs = landmarks[mp_pose_global.PoseLandmark.RIGHT_SHOULDER.value]
+    sw = abs(ls.x - rs.x)
+    if (math.sqrt((lw.x-rs.x)**2+(lw.y-rs.y)**2) > sw*1.8 or
+            math.sqrt((rw.x-ls.x)**2+(rw.y-ls.y)**2) > sw*1.8 or
+            lw.y > lh.y or rw.y > rh.y):
+        return False, "Keep arms crossed — do NOT push off with hands"
+    return True, "Good — arms staying crossed on chest"
 
-        # ── Instruction text ──
-        cv2.rectangle(frame, (0, 0), (frame.shape[1], 45), (0,0,0), -1)
-        cv2.putText(frame, instruction, (10, 32),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,255), 2)
 
-        # ── Status text ──
-        color = (0, 255, 0) if check_passed else (0, 0, 255)
-        cv2.rectangle(frame, (0, 50), (frame.shape[1], 90), (0,0,0), -1)
-        cv2.putText(frame, status_message, (10, 78),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.75, color, 2)
+def _no_check(landmarks):
+    return True, ""
 
-        # ── Hold timer ──
-        if check_passed:
-            if step_pass_start is None:
-                step_pass_start = time.time()
-            held = time.time() - step_pass_start
-            remaining = max(0, 2.0 - held)
-            cv2.putText(frame, f"Hold for {remaining:.1f}s...", (10, 120),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
-            if held >= 2.0:
-                current_step   += 1
-                step_pass_start = None
-        else:
-            step_pass_start = None
 
-        cv2.imshow(window_name, frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            return False
+# ── Slide definitions ─────────────────────────────────────────────
+TEST_SLIDES = [
+    ("Step 1 of 7 — Starting position",
+     "Sit at the FRONT EDGE of the chair.\nBack straight. Feet flat on the floor.",
+     "Sit at the front edge of the chair with your back straight and feet flat on the floor.",
+     _check_seated, 2.0),
+    ("Step 2 of 7 — Foot placement",
+     "Keep your feet SHOULDER-WIDTH apart.\nDo NOT move or reposition them during the test.",
+     "Keep your feet shoulder-width apart and do not move or reposition them during the test.",
+     _check_feet_flat, 2.0),
+    ("Step 3 of 7 — Arms position",
+     "Cross your arms OVER YOUR CHEST.\nKeep them there throughout the entire test.",
+     "Cross your arms over your chest and keep them there throughout the test.",
+     _check_arms_crossed, 2.0),
+    ("Step 4 of 7 — How to stand",
+     "Stand up FULLY until hips and knees are straight.\nThen sit back down in a controlled way.",
+     "Stand up fully until your hips and knees are straight, then sit back down in a controlled way.",
+     _check_full_stand, 2.0),
+    ("Step 5 of 7 — What counts as a rep",
+     "Each rep = full SIT  ->  STAND  ->  SIT.\nBoth phases must be complete to count.",
+     "Each repetition must be a full sit, stand, sit, to be counted correctly.",
+     _no_check, 3.0),
+    ("Step 6 of 7 — Do NOT use your arms",
+     "Do NOT use your hands or arms to push off.\nThe test will STOP AUTOMATICALLY if you do.",
+     "Do not use your hands or arms to push off, or the test will stop automatically.",
+     _check_no_arm_push, 2.0),
+    ("Step 7 of 7 — Timer",
+     "Follow the on-screen timer.\nContinue until the 30-second test is complete.",
+     "Follow the on-screen timer and continue until the 30-second test is complete.",
+     _no_check, 3.0),
+]
 
-    # All 6 steps passed
+
+# ─────────────────────────────────────────────────────────────────
+# SLIDE DRAW — uses pre-loaded cached image, no disk IO
+# ─────────────────────────────────────────────────────────────────
+def _draw_slide(frame, header, body, status_msg, status_ok,
+                held, hold_needed, slide_idx, total_slides, cached_img):
+    h, w = frame.shape[:2]
+    half = w // 2
+
+    # scale font sizes relative to frame height so it fits any resolution
+    fs_header  = max(0.4, h / 900)
+    fs_body    = max(0.4, h / 950)
+    fs_small   = max(0.3, h / 1200)
+    hdr_h      = max(40, int(h * 0.07))   # header bar height
+    panel_h    = max(180, int(h * 0.32))  # bottom panel height
+    panel_y    = h - panel_h
+
+    # ── left white background ─────────────────────────────────────
+    filled_rect(frame, 0, 0, half, h, C_BG)
+
+    # ── paste cached image ────────────────────────────────────────
+    if cached_img is not None:
+        img_area_h = panel_y
+        resized = cv2.resize(cached_img, (half, img_area_h))
+        frame[0:img_area_h, 0:half] = resized
+
+    # ── left header bar ───────────────────────────────────────────
+    filled_rect(frame, 0, 0, half, hdr_h, C_PRIMARY)
+    # split header into two lines if too long
+    hdr_parts = header.split(" — ")
+    if len(hdr_parts) == 2:
+        cv2.putText(frame, hdr_parts[0],
+                    (10, int(hdr_h * 0.5)), FH, fs_small, C_WHITE, 1)
+        cv2.putText(frame, hdr_parts[1],
+                    (10, int(hdr_h * 0.88)), FB, fs_small, (200,240,200), 1)
+    else:
+        cv2.putText(frame, header,
+                    (10, int(hdr_h * 0.7)), FH, fs_small, C_WHITE, 1)
+
+    # ── bottom panel ──────────────────────────────────────────────
+    filled_rect(frame, 0, panel_y, half, h, C_SURFACE, C_BORDER, 1)
+    cv2.line(frame, (0, panel_y), (half, panel_y), C_PRIMARY, 2)
+
+    ty = panel_y + int(panel_h * 0.13)
+    for ln in body.split("\n"):
+        # truncate text to fit within left panel width
+        max_w = half - 20
+        while cv2.getTextSize(ln, FH, fs_body, 1)[0][0] > max_w and len(ln) > 5:
+            ln = ln[:-1]
+        cv2.putText(frame, ln, (10, ty), FH, fs_body, C_TEXT, 1)
+        ty += int(panel_h * 0.16)
+
+    ty += 4
+    if status_msg:
+        status_chip(frame, 10, ty, status_msg, status_ok)
+
+    bar_y = h - int(panel_h * 0.18)
+    cv2.putText(frame, "Hold position to confirm:",
+                (10, bar_y - 10), FB, fs_small, C_MUTED, 1)
+    progress_bar(frame, 10, bar_y, half - 10,
+                 held / hold_needed if hold_needed > 0 else 0, h=12)
+
+    cv2.putText(frame, "SPACE = skip  |  Q = quit",
+                (10, h - 6), FB, fs_small * 0.85, C_MUTED, 1)
+
+    # ── right panel header ────────────────────────────────────────
+    filled_rect(frame, half, 0, w, hdr_h, C_PRIMARY)
+    cv2.putText(frame, "Live Camera",
+                (half + 10, int(hdr_h * 0.5)), FH, fs_small, C_WHITE, 1)
+    cv2.putText(frame, "get into position",
+                (half + 10, int(hdr_h * 0.88)), FB, fs_small, (200,240,200), 1)
+
+    # ── divider line between left and right ───────────────────────
+    cv2.line(frame, (half, 0), (half, h), C_PRIMARY, 2)
+
+    # ── step dots bottom right ────────────────────────────────────
+    dot_y = h - 12
+    sp    = max(18, int(w * 0.018))
+    sx    = half + (half - total_slides * sp) // 2
+    for i in range(total_slides):
+        col = C_SECONDARY if i < slide_idx else \
+              C_PRIMARY   if i == slide_idx else C_BORDER
+        r   = 8 if i == slide_idx else 5
+        cv2.circle(frame, (sx + i * sp, dot_y), r, col, -1)
+        if i == slide_idx:
+            cv2.circle(frame, (sx + i * sp, dot_y), r, C_WHITE, 1)
+
+    return frame
+
+
+# ─────────────────────────────────────────────────────────────────
+# SCREEN 2 — TEST INSTRUCTIONS + LIVE CAMERA CHECK
+# ─────────────────────────────────────────────────────────────────
+def show_test_instructions(cap, pose, image_path="test_instructions.png"):
+    WIN = "30-Second Chair Stand Test"
+    cv2.namedWindow(WIN, cv2.WINDOW_NORMAL)
+    cv2.setWindowProperty(WIN, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+
+    total = len(TEST_SLIDES)
+
+    # ── Get frame size from camera ────────────────────────────────
+    ret_t, test_f = cap.read()
+    h_f    = test_f.shape[0] if ret_t else 480
+    w_f    = test_f.shape[1] if ret_t else 640
+    half_f = w_f // 2
+    # panel_y mirrors _draw_slide logic
+    panel_h_f  = max(180, int(h_f * 0.32))
+    panel_y_f  = h_f - panel_h_f
+
+    # ── Load and resize instruction image ONCE ────────────────────
+    cached_img = None
+    raw = cv2.imread(os.path.join(os.getcwd(), image_path))
+    if raw is not None:
+        cached_img = cv2.resize(raw, (half_f, panel_y_f))
+        print(f"[Info] Instruction image loaded: {half_f}x{panel_y_f}")
+    else:
+        print(f"[Info] {image_path} not found — no image on left panel.")
+
+    # ── Pose skip counter + cached result ────────────────────────
+    POSE_SKIP   = 2
+    tick        = 0
+    last_ok     = False
+    last_msg    = "No body detected — step into camera view"
+
+    # play intro ONCE before any slides begin
+    speak('test_intro')
+
+    for idx, (header, body, spoken, check_fn, hold_needed) in \
+            enumerate(TEST_SLIDES):
+
+        speak(f'test_{idx+1}')
+
+        hold_start = None
+        slide_done = False
+
+        while not slide_done:
+            ret, frame = cap.read()
+            if not ret:
+                continue
+            frame = cv2.flip(frame, 1)
+
+            # pose detection every POSE_SKIP frames only
+            tick += 1
+            if tick % POSE_SKIP == 0:
+                rgb     = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                results = pose.process(rgb)
+                if results.pose_landmarks:
+                    last_ok, last_msg = check_fn(
+                        results.pose_landmarks.landmark)
+                else:
+                    last_ok  = False
+                    last_msg = "No body detected — step into camera view"
+
+            # hold timer
+            if last_ok:
+                if hold_start is None:
+                    hold_start = time.time()
+                held = time.time() - hold_start
+                if held >= hold_needed:
+                    slide_done = True
+            else:
+                hold_start = None
+                held = 0.0
+
+            frame = _draw_slide(
+                frame, header, body, last_msg, last_ok,
+                held if hold_start else 0.0,
+                hold_needed, idx, total, cached_img
+            )
+
+            cv2.imshow(WIN, frame)
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('q'):
+                return False
+            if key == ord(' '):
+                speak("Step skipped.")
+                slide_done = True
+
+        # brief pause between slides — no audio here
+        time.sleep(0.3)
+
+    # ALL slides done — say confirmed only once at the very end
+    speak('test_confirmed')
+    speak("All steps confirmed. Get ready to start the test.")
+    time.sleep(0.5)
     return True
 
 
 # ─────────────────────────────────────────────────────────────────
-# YOUR ORIGINAL CLASS — every method kept exactly as you wrote it
-# Only run_test() has additions marked with # NEW
+# EDGE CASE 1 — POOR LIGHTING
+# ─────────────────────────────────────────────────────────────────
+def check_lighting(frame):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    h, w = gray.shape
+    if float(np.mean(gray)) < 60:
+        return True, "Low lighting! Please turn on a light."
+    top    = float(np.mean(gray[0:h//4,      w//4:3*w//4]))
+    centre = float(np.mean(gray[h//4:3*h//4, w//4:3*w//4]))
+    if top > centre + 80 and top > 180:
+        return True, "Backlit! Move away from the window."
+    return False, ""
+
+
+# ─────────────────────────────────────────────────────────────────
+# EDGE CASE 2 — MULTIPLE PEOPLE
+# ─────────────────────────────────────────────────────────────────
+def check_multiple_people(frame):
+    hog = cv2.HOGDescriptor()
+    hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+    rects, _ = hog.detectMultiScale(
+        cv2.resize(frame, (320, 240)),
+        winStride=(8,8), padding=(4,4), scale=1.05)
+    c = len(rects)
+    return c > 1, c
+
+
+# ─────────────────────────────────────────────────────────────────
+# WARNING BADGES
+# ─────────────────────────────────────────────────────────────────
+def draw_warnings(frame, lighting_bad, lighting_msg,
+                  multi_people, people_count):
+    h, w     = frame.shape[:2]
+    y_offset = 60
+
+    def badge(text, bg):
+        nonlocal y_offset
+        (tw, th), _ = cv2.getTextSize(text, FB, 0.55, 1)
+        pad = 7
+        x1 = w - tw - pad*2 - 12
+        y2 = y_offset + th + pad*2
+        filled_rect(frame, x1, y_offset, w-12, y2, bg, C_WHITE, 1)
+        cv2.putText(frame, text, (x1+pad, y2-pad), FB, 0.55, C_WHITE, 1)
+        y_offset = y2 + 5
+
+    if lighting_bad:
+        badge(f"! {lighting_msg}", C_WARNING_BG)
+    if multi_people:
+        badge(f"! {people_count} people in frame — ask others to step out",
+              C_DANGER_BG)
+
+
+# ─────────────────────────────────────────────────────────────────
+# MAIN CLASS
 # ─────────────────────────────────────────────────────────────────
 class SitToStandCounter:
     def __init__(self):
@@ -408,52 +670,48 @@ class SitToStandCounter:
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5
         )
-        self.stand_count = 0
-        self.current_state = "sitting"
-        self.test_duration = 30
-        self.start_time = None
-        self.test_started = False
-        self.test_stopped = False
-        self.last_change_time = 0
-        self.COOLDOWN = 0.8
-        self.arm_violation_count = 0
+        self.stand_count             = 0
+        self.current_state           = "sitting"
+        self.test_duration           = 30
+        self.start_time              = None
+        self.test_started            = False
+        self.test_stopped            = False
+        self.last_change_time        = 0
+        self.COOLDOWN                = 0.8
+        self.arm_violation_count     = 0
         self.arm_violation_threshold = 15
         self.scoring_norms = {
-            'men': {
-                '60-64': 14, '65-69': 12, '70-74': 12, '75-79': 11,
-                '80-84': 10, '85-89': 8,  '90-94': 7
-            },
-            'women': {
-                '60-64': 12, '65-69': 11, '70-74': 10, '75-79': 10,
-                '80-84': 9,  '85-89': 8,  '90-94': 4
-            }
+            'men':   {'60-64':14,'65-69':12,'70-74':12,'75-79':11,
+                      '80-84':10,'85-89':8, '90-94':7},
+            'women': {'60-64':12,'65-69':11,'70-74':10,'75-79':10,
+                      '80-84':9, '85-89':8, '90-94':4}
         }
-        self.seated_time = None
-        self.auto_start_enabled = True
-        self.countdown_done = False
-        self.countdown_start = None
-        self.countdown_duration = 3
-        self.state_buffer = []
-        self.required_frames = 10
-        self.get_ready_start = None
-        self.full_stand_reached = False
-        self.session_history = []
-        self.session_id = 1
+        self.seated_time         = None
+        self.auto_start_enabled  = True
+        self.countdown_done      = False
+        self.countdown_start     = None
+        self.countdown_duration  = 3
+        self.state_buffer        = []
+        self.required_frames     = 10
+        self.get_ready_start     = None
+        self.full_stand_reached  = False
+        self.session_history     = []
+        self.session_id          = 1
+        self._multi_people       = False
+        self._people_count       = 1
 
     def is_user_seated(self, landmarks):
         try:
-            left_hip   = landmarks[self.mp_pose.PoseLandmark.LEFT_HIP.value].y
-            right_hip  = landmarks[self.mp_pose.PoseLandmark.RIGHT_HIP.value].y
-            left_knee  = landmarks[self.mp_pose.PoseLandmark.LEFT_KNEE.value].y
-            right_knee = landmarks[self.mp_pose.PoseLandmark.RIGHT_KNEE.value].y
-            hip_y  = (left_hip  + right_hip)  / 2
-            knee_y = (left_knee + right_knee) / 2
-            return knee_y > hip_y + 0.03
+            lh = landmarks[self.mp_pose.PoseLandmark.LEFT_HIP.value].y
+            rh = landmarks[self.mp_pose.PoseLandmark.RIGHT_HIP.value].y
+            lk = landmarks[self.mp_pose.PoseLandmark.LEFT_KNEE.value].y
+            rk = landmarks[self.mp_pose.PoseLandmark.RIGHT_KNEE.value].y
+            return (lk+rk)/2 > (lh+rh)/2 + 0.03
         except:
             return False
 
     def get_age_range(self, age):
-        if 60 <= age <= 64:   return '60-64'
+        if   60 <= age <= 64: return '60-64'
         elif 65 <= age <= 69: return '65-69'
         elif 70 <= age <= 74: return '70-74'
         elif 75 <= age <= 79: return '75-79'
@@ -465,29 +723,25 @@ class SitToStandCounter:
     def evaluate_score(self, count, age, gender):
         age_range = self.get_age_range(age)
         if age_range is None:
-            return {'score': count, 'age_range': age_range,
-                    'assessment': 'No norms available for this age'}
-        gender_lower = gender.lower()
-        if gender_lower not in ['men', 'women', 'male', 'female']:
-            return {'score': count, 'age_range': age_range,
-                    'assessment': 'Invalid gender specified'}
-        gender_key = 'men' if gender_lower in ['male', 'men'] else 'women'
-        threshold  = self.scoring_norms[gender_key][age_range]
+            return {'score':count,'age_range':None,
+                    'assessment':'No norms available for this age'}
+        gk = 'men' if gender.lower() in ['male','men','m'] else 'women'
+        if gender.lower() not in ['men','women','male','female','m','f']:
+            return {'score':count,'age_range':age_range,
+                    'assessment':'Invalid gender specified'}
+        threshold = self.scoring_norms[gk][age_range]
         if count < threshold:
             assessment     = "Below expected range for age and sex"
-            interpretation = (
-                "This suggests weaker lower-body strength. "
+            interpretation = ("This suggests weaker lower-body strength. "
                 "Weaker leg strength may increase fall risk "
-                "when combined with balance problems or prior falls."
-            )
+                "when combined with balance problems or prior falls.")
         else:
             assessment     = "Within or above expected range for age and sex"
-            interpretation = "This suggests adequate lower-body strength for daily activities."
-        return {
-            'score': count, 'age_range': age_range, 'threshold': threshold,
-            'assessment': assessment, 'interpretation': interpretation,
-            'gender': gender_key.capitalize()
-        }
+            interpretation = ("This suggests adequate lower-body strength "
+                              "for daily activities.")
+        return {'score':count,'age_range':age_range,'threshold':threshold,
+                'assessment':assessment,'interpretation':interpretation,
+                'gender':gk.capitalize()}
 
     def print_final_report(self, count, age, gender, arm_violation=False):
         print("\n" + "="*70)
@@ -503,9 +757,9 @@ class SitToStandCounter:
         if arm_violation:
             print(f"  TEST STOPPED - Patient used arms to stand")
             print(f"  Total Stands: 0 (Protocol Violation)")
-            print(f"\n  ⚠️  According to CDC STEADI protocol:")
-            print(f"     'If the patient must use his/her arms to stand,")
-            print(f"      stop the test. Record 0 for the number and score.'")
+            print(f"\n  According to CDC STEADI protocol:")
+            print(f"     If the patient must use arms to stand,")
+            print(f"     stop the test. Record 0 for the number and score.")
         else:
             print(f"  Total Stands in 30 seconds: {result['score']}")
             if 'threshold' in result:
@@ -513,14 +767,14 @@ class SitToStandCounter:
             print(f"\nAssessment:")
             print(f"  {result['assessment']}")
             print(f"\nInterpretation:")
-            print(f"  {result.get('interpretation', 'Interpretation not available.')}")
+            print(f"  {result.get('interpretation','Interpretation not available.')}")
             print("\nNotes:")
-            print("  • This test measures lower-body (leg) strength and functional mobility only.")
-            print("  • It is a screening tool and should not be used alone to diagnose frailty or fall risk.")
-            print("  • Balance is not directly measured in this test.")
-            print("  • Interpret results with caution if balance felt unsteady, hands were used,")
-            print("    or test conditions or camera setup were not ideal.")
-            print("  • Consider sharing these results with a healthcare professional.")
+            print("  This test measures lower-body (leg) strength and functional mobility only.")
+            print("  It is a screening tool and should not be used alone to diagnose frailty.")
+            print("  Balance is not directly measured in this test.")
+            print("  Interpret results with caution if balance felt unsteady, hands were used,")
+            print("  or test conditions or camera setup were not ideal.")
+            print("  Consider sharing these results with a healthcare professional.")
         print("\n" + "-"*70)
         print("Reference: CDC STEADI - Stopping Elderly Accidents, Deaths & Injuries")
         print("="*70 + "\n")
@@ -534,14 +788,14 @@ class SitToStandCounter:
             "gender":        gender,
             "count":         count,
             "arm_violation": arm_violation,
-            "assessment":    result.get("assessment", "N/A")
+            "assessment":    result.get("assessment","N/A")
         })
         self.session_id += 1
 
     def display_session_history(self):
-        print("\n" + "=" * 70)
+        print("\n" + "="*70)
         print("SESSION HISTORY")
-        print("=" * 70)
+        print("="*70)
         for s in self.session_history:
             print(
                 f"Session {s['session_id']} | {s['timestamp']} | "
@@ -549,7 +803,7 @@ class SitToStandCounter:
                 f"Count: {s['count']} | "
                 f"Arm Violation: {'YES' if s['arm_violation'] else 'NO'}"
             )
-        print("=" * 70 + "\n")
+        print("="*70 + "\n")
 
     def prompt_retry_or_quit(self):
         while True:
@@ -559,105 +813,93 @@ class SitToStandCounter:
             else: print("Invalid input. Enter R or Q.")
 
     def reset_test_state(self):
-        self.stand_count = 0
-        self.current_state = "sitting"
-        self.start_time = None
-        self.test_started = False
-        self.test_stopped = False
+        self.stand_count         = 0
+        self.current_state       = "sitting"
+        self.start_time          = None
+        self.test_started        = False
+        self.test_stopped        = False
         self.arm_violation_count = 0
-        self.last_change_time = 0
-        self.seated_time = None
+        self.last_change_time    = 0
+        self.seated_time         = None
         self.state_buffer.clear()
-        self.full_stand_reached = False
+        self.full_stand_reached  = False
+        self._multi_people       = False
+        self._people_count       = 1
 
     def check_arm_usage(self, landmarks):
         try:
-            left_shoulder  = landmarks[self.mp_pose.PoseLandmark.LEFT_SHOULDER.value]
-            right_shoulder = landmarks[self.mp_pose.PoseLandmark.RIGHT_SHOULDER.value]
-            left_wrist     = landmarks[self.mp_pose.PoseLandmark.LEFT_WRIST.value]
-            right_wrist    = landmarks[self.mp_pose.PoseLandmark.RIGHT_WRIST.value]
-            left_hip       = landmarks[self.mp_pose.PoseLandmark.LEFT_HIP.value]
-            right_hip      = landmarks[self.mp_pose.PoseLandmark.RIGHT_HIP.value]
-            left_wrist_to_right_shoulder = np.sqrt(
-                (left_wrist.x  - right_shoulder.x)**2 +
-                (left_wrist.y  - right_shoulder.y)**2)
-            right_wrist_to_left_shoulder = np.sqrt(
-                (right_wrist.x - left_shoulder.x)**2 +
-                (right_wrist.y - left_shoulder.y)**2)
-            left_wrist_below_hip  = left_wrist.y  > left_hip.y
-            right_wrist_below_hip = right_wrist.y > right_hip.y
-            shoulder_width        = abs(left_shoulder.x - right_shoulder.x)
-            max_wrist_distance    = shoulder_width * 1.8
-            return ((left_wrist_to_right_shoulder > max_wrist_distance or
-                     right_wrist_to_left_shoulder > max_wrist_distance) or
-                    (left_wrist_below_hip or right_wrist_below_hip))
+            ls = landmarks[self.mp_pose.PoseLandmark.LEFT_SHOULDER.value]
+            rs = landmarks[self.mp_pose.PoseLandmark.RIGHT_SHOULDER.value]
+            lw = landmarks[self.mp_pose.PoseLandmark.LEFT_WRIST.value]
+            rw = landmarks[self.mp_pose.PoseLandmark.RIGHT_WRIST.value]
+            lh = landmarks[self.mp_pose.PoseLandmark.LEFT_HIP.value]
+            rh = landmarks[self.mp_pose.PoseLandmark.RIGHT_HIP.value]
+            sw = abs(ls.x - rs.x)
+            lw_to_rs = np.sqrt((lw.x-rs.x)**2+(lw.y-rs.y)**2)
+            rw_to_ls = np.sqrt((rw.x-ls.x)**2+(rw.y-ls.y)**2)
+            return ((lw_to_rs > sw*1.8 or rw_to_ls > sw*1.8) or
+                    (lw.y > lh.y or rw.y > rh.y))
         except Exception as e:
             print(f"Error checking arm usage: {e}")
             return False
 
     def are_arms_crossed(self, landmarks):
         try:
-            left_shoulder  = landmarks[self.mp_pose.PoseLandmark.LEFT_SHOULDER.value]
-            right_shoulder = landmarks[self.mp_pose.PoseLandmark.RIGHT_SHOULDER.value]
-            left_wrist     = landmarks[self.mp_pose.PoseLandmark.LEFT_WRIST.value]
-            right_wrist    = landmarks[self.mp_pose.PoseLandmark.RIGHT_WRIST.value]
-            shoulder_width = abs(left_shoulder.x - right_shoulder.x)
-            lw_to_rs = np.sqrt((left_wrist.x  - right_shoulder.x)**2 +
-                               (left_wrist.y  - right_shoulder.y)**2)
-            rw_to_ls = np.sqrt((right_wrist.x - left_shoulder.x)**2 +
-                               (right_wrist.y - left_shoulder.y)**2)
-            max_dist = shoulder_width * 1.2
-            return lw_to_rs < max_dist and rw_to_ls < max_dist
+            ls = landmarks[self.mp_pose.PoseLandmark.LEFT_SHOULDER.value]
+            rs = landmarks[self.mp_pose.PoseLandmark.RIGHT_SHOULDER.value]
+            lw = landmarks[self.mp_pose.PoseLandmark.LEFT_WRIST.value]
+            rw = landmarks[self.mp_pose.PoseLandmark.RIGHT_WRIST.value]
+            sw = abs(ls.x - rs.x)
+            return (np.sqrt((lw.x-rs.x)**2+(lw.y-rs.y)**2) < sw*1.2 and
+                    np.sqrt((rw.x-ls.x)**2+(rw.y-ls.y)**2) < sw*1.2)
         except:
             return False
 
     def calculate_body_posture(self, landmarks):
         try:
-            shoulder_y = (landmarks[self.mp_pose.PoseLandmark.LEFT_SHOULDER.value].y +
-                          landmarks[self.mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y) / 2
-            hip_y      = (landmarks[self.mp_pose.PoseLandmark.LEFT_HIP.value].y +
-                          landmarks[self.mp_pose.PoseLandmark.RIGHT_HIP.value].y) / 2
-            knee_y     = (landmarks[self.mp_pose.PoseLandmark.LEFT_KNEE.value].y +
-                          landmarks[self.mp_pose.PoseLandmark.RIGHT_KNEE.value].y) / 2
-            torso_len   = abs(shoulder_y - hip_y)
-            hip_to_knee = abs(hip_y - knee_y)
-            if torso_len == 0:
-                return self.current_state
-            posture_score = hip_to_knee / torso_len
-            if posture_score < 0.55:   return "sitting"
-            elif posture_score > 0.70: return "standing"
-            else:                      return "transition"
+            sh_y  = (landmarks[self.mp_pose.PoseLandmark.LEFT_SHOULDER.value].y +
+                     landmarks[self.mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y)/2
+            hip_y = (landmarks[self.mp_pose.PoseLandmark.LEFT_HIP.value].y +
+                     landmarks[self.mp_pose.PoseLandmark.RIGHT_HIP.value].y)/2
+            kn_y  = (landmarks[self.mp_pose.PoseLandmark.LEFT_KNEE.value].y +
+                     landmarks[self.mp_pose.PoseLandmark.RIGHT_KNEE.value].y)/2
+            torso = abs(sh_y - hip_y)
+            if torso == 0: return self.current_state
+            score = abs(hip_y - kn_y) / torso
+            if score < 0.55:   return "sitting"
+            elif score > 0.70: return "standing"
+            else:              return "transition"
         except:
             return self.current_state
 
     def is_fully_standing(self, landmarks):
-        hip_y      = (landmarks[self.mp_pose.PoseLandmark.LEFT_HIP.value].y +
-                      landmarks[self.mp_pose.PoseLandmark.RIGHT_HIP.value].y) / 2
-        knee_y     = (landmarks[self.mp_pose.PoseLandmark.LEFT_KNEE.value].y +
-                      landmarks[self.mp_pose.PoseLandmark.RIGHT_KNEE.value].y) / 2
-        shoulder_y = (landmarks[self.mp_pose.PoseLandmark.LEFT_SHOULDER.value].y +
-                      landmarks[self.mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y) / 2
-        torso_len  = abs(shoulder_y - hip_y)
-        return hip_y < knee_y - (torso_len * 0.3)
+        hip_y = (landmarks[self.mp_pose.PoseLandmark.LEFT_HIP.value].y +
+                 landmarks[self.mp_pose.PoseLandmark.RIGHT_HIP.value].y)/2
+        kn_y  = (landmarks[self.mp_pose.PoseLandmark.LEFT_KNEE.value].y +
+                 landmarks[self.mp_pose.PoseLandmark.RIGHT_KNEE.value].y)/2
+        sh_y  = (landmarks[self.mp_pose.PoseLandmark.LEFT_SHOULDER.value].y +
+                 landmarks[self.mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y)/2
+        return hip_y < kn_y - (abs(sh_y-hip_y)*0.3)
 
     def update_count(self, new_state, landmarks):
-        current_time = time.time()
-        if new_state == "transition":
-            return
+        now = time.time()
+        if new_state == "transition": return
         if new_state == "standing" and self.current_state != "standing":
-            if self.is_fully_standing(landmarks) and current_time - self.last_change_time > self.COOLDOWN:
+            if (self.is_fully_standing(landmarks) and
+                    now - self.last_change_time > self.COOLDOWN):
                 self.current_state = "standing"
                 if not self.full_stand_reached:
                     self.full_stand_reached = True
                     print("[DEBUG] Full stand confirmed")
-                self.last_change_time = current_time
-        if new_state == "sitting" and self.current_state == "standing" and self.full_stand_reached:
-            if current_time - self.last_change_time > self.COOLDOWN:
-                self.stand_count   += 1
-                self.current_state  = "sitting"
+                self.last_change_time = now
+        if (new_state == "sitting" and self.current_state == "standing"
+                and self.full_stand_reached):
+            if now - self.last_change_time > self.COOLDOWN:
+                self.stand_count       += 1
+                self.current_state      = "sitting"
                 self.full_stand_reached = False
-                self.last_change_time   = current_time
-                print(f"✅ Rep completed! Count = {self.stand_count}")
+                self.last_change_time   = now
+                print(f"Rep completed! Count = {self.stand_count}")
 
     def get_patient_info(self):
         print("\n" + "="*70)
@@ -674,66 +916,133 @@ class SitToStandCounter:
                 print("Invalid input. Please enter a number.")
         while True:
             gender = input("Enter patient gender (Male/Female or M/F): ").strip().lower()
-            if gender in ['male', 'female', 'm', 'f', 'men', 'women']:
-                if gender == 'm':   gender = 'male'
+            if gender in ['male','female','m','f','men','women']:
+                if gender == 'm': gender = 'male'
                 elif gender == 'f': gender = 'female'
                 break
-            else:
-                print("Invalid input. Please enter Male/Female or M/F.")
+            print("Invalid input. Please enter Male/Female or M/F.")
         return age, gender
 
     def show_result_overlay(self, cap, final_result, test_status):
         while True:
             ret, frame = cap.read()
-            if not ret:
-                continue
+            if not ret: continue
             frame = cv2.flip(frame, 1)
-            title_text  = "TEST COMPLETE" if test_status == "completed" else "TEST FAILED"
-            title_color = (0, 255, 0)     if test_status == "completed" else (0, 0, 255)
-            cv2.putText(frame, title_text, (40, 60),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.6, title_color, 3)
-            cv2.putText(frame, f"Total Stands: {self.stand_count}", (40, 120),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.1, (255, 255, 0), 2)
-            cv2.putText(frame, "Result:", (40, 165),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
-            cv2.putText(frame, final_result.get('assessment', 'Result not available'),
-                        (40, 200), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (200, 255, 200), 2)
-            cv2.putText(frame, "This test measures leg strength only and is not a diagnosis.",
-                        (40, 235), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 180, 180), 1)
-            cv2.putText(frame, "SESSION HISTORY", (40, 270),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2)
-            y_offset = 310
-            s    = self.session_history[-1]
-            text = (
-                f"Session {len(self.session_history)} | {s['timestamp']} | "
-                f"Age: {s['age']} | Gender: {s['gender']} | "
-                f"Count: {s['count']} | "
-                f"Arm Violation: {'YES' if s['arm_violation'] else 'NO'}"
-            )
-            cv2.putText(frame, text, (40, y_offset),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1)
-            cv2.putText(frame, "Press R to Retry or Q to Quit",
-                        (40, y_offset + 60),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 255), 2)
+            h, w  = frame.shape[:2]
+
+            # dim background
+            overlay = frame.copy()
+            cv2.rectangle(overlay, (0,0), (w,h), (10,10,10), -1)
+            cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, frame)
+
+            # card dimensions — use most of the screen
+            cx  = int(w * 0.08)
+            cy  = int(h * 0.05)
+            cw  = int(w * 0.84)
+            ch  = int(h * 0.90)
+            cx2 = cx + cw
+            cy2 = cy + ch
+
+            filled_rect(frame, cx, cy, cx2, cy2, C_BG, C_BORDER, 2)
+
+            # header
+            hdr_h = int(ch * 0.12)
+            hdr_col = C_PRIMARY if test_status == "completed" else C_ERROR
+            filled_rect(frame, cx, cy, cx2, cy + hdr_h, hdr_col)
+            title = "TEST COMPLETE" if test_status == "completed" else "TEST STOPPED"
+            ts = cv2.getTextSize(title, FH, 1.4, 2)[0]
+            cv2.putText(frame, title,
+                        (cx + (cw - ts[0])//2, cy + hdr_h - 14),
+                        FH, 1.4, C_WHITE, 2)
+
+            # helper: draw text clipped to card, auto font scale
+            def card_text(text, y, font, scale, color, thickness=1):
+                # shrink scale until text fits card width with padding
+                pad = 24
+                max_w = cw - pad * 2
+                s = scale
+                while cv2.getTextSize(text, font, s, thickness)[0][0] > max_w \
+                        and s > 0.35:
+                    s -= 0.05
+                cv2.putText(frame, text, (cx + pad, y), font, s, color, thickness)
+                return int(cv2.getTextSize(text, font, s, thickness)[0][1] * 1.6)
+
+            ty = cy + hdr_h + 28
+
+            # total stands
+            line_h = card_text(f"Total Stands:  {self.stand_count}",
+                                ty, FH, 1.0, C_TEXT, 2)
+            ty += line_h + 10
+
+            # divider
+            cv2.line(frame, (cx+16, ty), (cx2-16, ty), C_BORDER, 1)
+            ty += 18
+
+            # assessment — may need wrapping
+            assess = final_result.get('assessment', 'N/A')
+            # calculate max chars that fit
+            test_w = cv2.getTextSize("W" * 40, FB, 0.72, 1)[0][0]
+            max_c  = int(40 * (cw - 48) / max(test_w, 1))
+            for ln in wrap_text(assess, max(20, max_c)):
+                lh2 = card_text(ln, ty, FB, 0.72, C_TEXT)
+                ty += lh2
+
+            ty += 6
+            # disclaimer
+            disc = "This test measures leg strength only and is not a diagnosis."
+            card_text(disc, ty, FB, 0.58, C_MUTED)
+            ty += 28
+
+            # divider
+            cv2.line(frame, (cx+16, ty), (cx2-16, ty), C_BORDER, 1)
+            ty += 16
+
+            # session info — split into two lines to avoid overflow
+            if self.session_history:
+                s = self.session_history[-1]
+                line1 = (f"Session {len(self.session_history)}  |  "
+                         f"Age: {s['age']}  |  Gender: {s['gender']}")
+                line2 = (f"Count: {s['count']}  |  "
+                         f"Arm violation: {'YES' if s['arm_violation'] else 'NO'}")
+                card_text(line1, ty, FB, 0.58, C_MUTED)
+                ty += 26
+                card_text(line2, ty, FB, 0.58, C_MUTED)
+                ty += 30
+
+            # buttons — always at bottom of card with padding
+            btn_y  = cy2 - 68
+            btn_w  = (cw - 48) // 2
+            primary_button(frame,
+                           cx+16,        btn_y,
+                           cx+16+btn_w,  btn_y + 52,
+                           "R  -  Retry", 0.75)
+            secondary_button(frame,
+                             cx+32+btn_w, btn_y,
+                             cx2-16,      btn_y + 52,
+                             "Q  -  Quit",  0.75)
+
             cv2.imshow("30-Second Chair Stand Test", frame)
             key = cv2.waitKey(1) & 0xFF
             if key in (ord('r'), ord('R')): return True
-            elif key in (ord('q'), ord('Q')): return False
+            if key in (ord('q'), ord('Q')): return False
 
+    # ─────────────────────────────────────────────────────────────
+    # RUN TEST
+    # ─────────────────────────────────────────────────────────────
     def run_test(self):
-        """Main function to run the 30-second chair stand test with retry loop"""
+        """Main function to run the 30-second chair stand test."""
 
         age, gender = self.get_patient_info()
 
-        # NEW: Show instruction screen once before first run
-        show_instruction_screen()
+        # Screen 1: basic instructions — no camera needed
+        show_basic_instructions(image_path="basic_instructions.png")
 
-        while True:  # Retry loop
+        while True:  # retry loop
 
             frame_skip  = 2
             frame_count = 0
 
-            # Auto Select Camera
+            # Auto-select camera
             for i in range(5):
                 cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
                 if cap.isOpened():
@@ -744,72 +1053,75 @@ class SitToStandCounter:
                 print("No camera found in indices 0-4")
                 return
 
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            # 640x480 — smooth real-time performance
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             cv2.namedWindow("30-Second Chair Stand Test", cv2.WINDOW_NORMAL)
             cv2.setWindowProperty("30-Second Chair Stand Test",
                                   cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
-            # NEW: Run all 6 position verification steps before the test
-            print("Starting position verification...")
-            all_passed = run_position_verification(
-                cap, self.pose, "30-Second Chair Stand Test"
-            )
+            # Screen 2: test instructions + live camera checks
+            all_passed = show_test_instructions(
+                cap, self.pose, image_path="test_instructions.png")
             if not all_passed:
                 cap.release()
                 cv2.destroyAllWindows()
                 self.pose.close()
                 return
 
-            # Wait for correct starting position (your original logic)
-            start_auto = False
+            # Starting position wait
             self.reset_test_state()
+            start_auto = False
 
             while not start_auto:
                 ret, frame = cap.read()
-                if not ret:
-                    break
+                if not ret: break
                 frame_count += 1
-                if frame_count % frame_skip != 0:
-                    continue
+                if frame_count % frame_skip != 0: continue
                 frame   = cv2.flip(frame, 1)
-                results = self.pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                results = self.pose.process(
+                    cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                h, w    = frame.shape[:2]
 
                 seated = arms_crossed = knees_visible = False
                 if results.pose_landmarks:
-                    landmarks    = results.pose_landmarks.landmark
-                    seated       = self.is_user_seated(landmarks)
-                    arms_crossed = self.are_arms_crossed(landmarks)
+                    lm           = results.pose_landmarks.landmark
+                    seated       = self.is_user_seated(lm)
+                    arms_crossed = self.are_arms_crossed(lm)
                     try:
-                        lk = landmarks[self.mp_pose.PoseLandmark.LEFT_KNEE.value].visibility
-                        rk = landmarks[self.mp_pose.PoseLandmark.RIGHT_KNEE.value].visibility
-                        knees_visible = lk > 0.6 and rk > 0.6
+                        lkv = lm[self.mp_pose.PoseLandmark.LEFT_KNEE.value].visibility
+                        rkv = lm[self.mp_pose.PoseLandmark.RIGHT_KNEE.value].visibility
+                        knees_visible = lkv > 0.6 and rkv > 0.6
                     except:
                         knees_visible = False
 
-                cv2.putText(frame, "30-SECOND CHAIR STAND TEST", (30, 40),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
+                filled_rect(frame, 0, 0, w, 55, C_PRIMARY)
+                cv2.putText(frame, "30-SECOND CHAIR STAND TEST",
+                            (20, 38), FH, 1.0, C_WHITE, 2)
                 cv2.putText(frame,
                             "Measures leg strength only. Use a stable chair.",
-                            (30, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2)
-                cv2.putText(frame, "Get into starting position:", (30, 100),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
-                y = 150
+                            (20, 72), FB, 0.6, C_MUTED, 1)
+                cv2.putText(frame, "Get into starting position:",
+                            (20, 105), FH, 0.8, C_TEXT, 1)
+
+                yc = 128
                 if not seated:
-                    cv2.putText(frame, "• Please sit properly on the chair",
-                                (30, y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-                    y += 40
+                    status_chip(frame, 20, yc,
+                                "Please sit properly on the chair", False)
+                    yc += 42
                 if seated and not arms_crossed:
-                    cv2.putText(frame, "• Please cross your arms on your chest",
-                                (30, y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-                    y += 40
+                    status_chip(frame, 20, yc,
+                                "Please cross your arms on your chest", False)
+                    yc += 42
                 if seated and not knees_visible:
-                    cv2.putText(frame, "• Ensure knees are visible to the camera",
-                                (30, y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-                    y += 40
+                    status_chip(frame, 20, yc,
+                                "Ensure knees are visible to the camera", False)
+                    yc += 42
                 if seated and arms_crossed and knees_visible:
-                    cv2.putText(frame, "Good position! Starting countdown...",
-                                (30, y), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 3)
+                    filled_rect(frame, 0, h-50, w, h, C_SECONDARY)
+                    cv2.putText(frame,
+                                "Good position! Starting countdown...",
+                                (20, h-16), FH, 0.9, C_WHITE, 2)
                     start_auto = True
                     self.countdown_start = time.time()
 
@@ -820,90 +1132,114 @@ class SitToStandCounter:
                     self.pose.close()
                     return
 
-            # NEW: Audible 3-2-1-GO countdown
+            # Countdown
             play_audible_countdown(cap, "30-Second Chair Stand Test")
 
-            # Main 30-second test loop (your original logic — unchanged)
+            # Main 30-second test loop
             self.start_time   = time.time()
             self.test_started = True
 
             while self.test_started and cap.isOpened():
                 ret, frame = cap.read()
-                if not ret:
-                    continue
+                if not ret: continue
                 frame   = cv2.flip(frame, 1)
-                results = self.pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                results = self.pose.process(
+                    cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
                 if not results.pose_landmarks:
                     cv2.imshow("30-Second Chair Stand Test", frame)
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
-                        break
+                    if cv2.waitKey(1) & 0xFF == ord('q'): break
                     continue
 
-                landmarks = results.pose_landmarks.landmark
+                lm   = results.pose_landmarks.landmark
+                h, w = frame.shape[:2]
 
-                arm_violation = self.check_arm_usage(landmarks)
-                if arm_violation:
-                    self.arm_violation_count += 1
-                else:
-                    self.arm_violation_count = 0
+                # edge case 1: lighting (every frame — very cheap)
+                lighting_bad, lighting_msg = check_lighting(frame)
+
+                # edge case 2: multiple people (every 10 frames — expensive)
+                frame_count += 1
+                if frame_count % 10 == 0:
+                    self._multi_people, self._people_count = \
+                        check_multiple_people(frame)
+
+                arm_violation = self.check_arm_usage(lm)
+                if arm_violation: self.arm_violation_count += 1
+                else:             self.arm_violation_count = 0
 
                 if self.arm_violation_count >= self.arm_violation_threshold:
                     self.test_stopped = True
                     self.test_started = False
                     result = self.evaluate_score(0, age, gender)
-                    self.record_session(age, gender, 0, result, arm_violation=True)
-                    self.print_final_report(0, age, gender, arm_violation=True)
-                    retry = self.show_result_overlay(cap, result, test_status="failed")
+                    self.record_session(age, gender, 0, result, True)
+                    self.print_final_report(0, age, gender, True)
+                    speak('test_stopped')
+                    retry = self.show_result_overlay(cap, result, "failed")
                     if retry:
-                        self.reset_test_state()
-                        break
+                        self.reset_test_state(); break
                     else:
                         self.display_session_history()
-                        self.pose.close()
-                        cap.release()
-                        cv2.destroyAllWindows()
-                        return
+                        self.pose.close(); cap.release()
+                        cv2.destroyAllWindows(); return
 
-                new_state = self.calculate_body_posture(landmarks)
-                self.update_count(new_state, landmarks)
+                new_state = self.calculate_body_posture(lm)
+                self.update_count(new_state, lm)
 
                 elapsed_time   = time.time() - self.start_time
                 remaining_time = max(0, self.test_duration - elapsed_time)
 
                 if remaining_time <= 0:
                     self.test_started = False
-                    result = self.evaluate_score(self.stand_count, age, gender)
-                    self.record_session(age, gender, self.stand_count, result, arm_violation=False)
-                    self.print_final_report(self.stand_count, age, gender, arm_violation=False)
-                    retry = self.show_result_overlay(cap, result, test_status="completed")
+                    result = self.evaluate_score(
+                        self.stand_count, age, gender)
+                    self.record_session(age, gender, self.stand_count,
+                                        result, False)
+                    self.print_final_report(
+                        self.stand_count, age, gender, False)
+                    speak('test_complete')
+                    retry = self.show_result_overlay(
+                        cap, result, "completed")
                     if retry:
-                        self.reset_test_state()
-                        break
+                        self.reset_test_state(); break
                     else:
                         self.display_session_history()
-                        self.pose.close()
-                        cap.release()
-                        cv2.destroyAllWindows()
-                        return
+                        self.pose.close(); cap.release()
+                        cv2.destroyAllWindows(); return
 
-                cv2.putText(frame, f"Count: {self.stand_count}", (10, 40),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
-                cv2.putText(frame, f"Time: {remaining_time:.1f}s", (10, 85),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
+                # HUD
+                filled_rect(frame, 0, 0, w, 50, C_PRIMARY)
+                cv2.putText(frame, "30-Second Chair Stand Test",
+                            (16, 34), FH, 0.9, C_WHITE, 2)
+
+                filled_rect(frame, 8,  58, 148, 118, C_SURFACE, C_BORDER, 1)
+                cv2.putText(frame, "REPS", (18, 76), FB, 0.5, C_MUTED, 1)
+                cv2.putText(frame, str(self.stand_count),
+                            (18, 112), FH, 1.3, C_PRIMARY, 2)
+
+                filled_rect(frame, 158, 58, 298, 118, C_SURFACE, C_BORDER, 1)
+                cv2.putText(frame, "TIME", (168, 76), FB, 0.5, C_MUTED, 1)
+                t_col = C_ERROR if remaining_time < 10 else C_PRIMARY
+                cv2.putText(frame, f"{remaining_time:.1f}s",
+                            (168, 112), FH, 1.1, t_col, 2)
+
                 if self.test_stopped:
-                    cv2.putText(frame, "TEST STOPPED", (10, 130),
-                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                    cv2.putText(frame, "TEST STOPPED",
+                                (8, 145), FH, 0.9, C_ERROR, 2)
+
+                progress_bar(frame, 0, h-6, w,
+                             1.0 - remaining_time/self.test_duration, h=6)
+
+                draw_warnings(frame, lighting_bad, lighting_msg,
+                              self._multi_people, self._people_count)
 
                 cv2.imshow("30-Second Chair Stand Test", frame)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
+                if cv2.waitKey(1) & 0xFF == ord('q'): break
 
             cap.release()
             cv2.destroyAllWindows()
 
 
-# ── Run ───────────────────────────────────────────────────────────
+# ── Run ────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     counter = SitToStandCounter()
     counter.run_test()
