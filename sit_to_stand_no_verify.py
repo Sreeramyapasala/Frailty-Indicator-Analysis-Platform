@@ -51,32 +51,20 @@ def secondary_button(img, x1, y1, x2, y2, text, font_scale=0.7):
                 FH, font_scale, C_PRIMARY, 1)
 
 
-def status_chip(img, x, y, text, ok, max_w=None):
+def status_chip(img, x, y, text, ok):
     bg  = C_SECONDARY if ok else C_ERROR
     bdr = C_PRIMARY   if ok else (30, 40, 180)
     tw, th = cv2.getTextSize(text, FB, 0.55, 1)[0]
     pad = 6
-    # clip chip width to max_w if provided
-    chip_w = tw + pad*2
-    if max_w is not None and chip_w > max_w:
-        # shrink text to fit
-        fs = 0.55
-        while cv2.getTextSize(text, FB, fs, 1)[0][0] + pad*2 > max_w and fs > 0.3:
-            fs -= 0.02
-        tw, th = cv2.getTextSize(text, FB, fs, 1)[0]
-        chip_w = min(tw + pad*2, max_w)
-        filled_rect(img, x, y, x+chip_w, y+th+pad*2, bg, bdr, 1)
-        cv2.putText(img, text, (x+pad, y+th+pad), FB, fs, C_WHITE, 1)
-    else:
-        filled_rect(img, x, y, x+chip_w, y+th+pad*2, bg, bdr, 1)
-        cv2.putText(img, text, (x+pad, y+th+pad), FB, 0.55, C_WHITE, 1)
+    filled_rect(img, x, y, x+tw+pad*2, y+th+pad*2, bg, bdr, 1)
+    cv2.putText(img, text, (x+pad, y+th+pad), FB, 0.55, C_WHITE, 1)
 
 
 def progress_bar(img, x1, y, x2, frac, h=12):
     filled_rect(img, x1, y, x2, y+h, C_BORDER)
     if frac > 0:
         filled_rect(img, x1, y,
-                    x1+int((x2-x1)*min(frac, 1.0)), y+h, C_SECONDARY)
+                    x1+int((x2-x1)*min(frac,1.0)), y+h, C_SECONDARY)
 
 
 def wrap_text(text, max_chars=55):
@@ -90,21 +78,6 @@ def wrap_text(text, max_chars=55):
             cur = w
     if cur: lines.append(cur)
     return lines
-
-
-def fit_image_on_canvas(img, canvas_w, canvas_h, bg_color=(245, 245, 245)):
-    """Fit image onto canvas preserving aspect ratio. No stretching."""
-    canvas = np.ones((canvas_h, canvas_w, 3), dtype=np.uint8)
-    canvas[:] = bg_color
-    ih, iw  = img.shape[:2]
-    scale   = min(canvas_w / iw, canvas_h / ih)
-    new_w   = int(iw * scale)
-    new_h   = int(ih * scale)
-    resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
-    x_off   = (canvas_w - new_w) // 2
-    y_off   = (canvas_h - new_h) // 2
-    canvas[y_off:y_off+new_h, x_off:x_off+new_w] = resized
-    return canvas
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -184,7 +157,7 @@ def speak(key):
 
 
 # ─────────────────────────────────────────────────────────────────
-# SCREEN 1 — BASIC INSTRUCTIONS
+# SCREEN 1 — BASIC INSTRUCTIONS (same as original)
 # ─────────────────────────────────────────────────────────────────
 BASIC_INSTRUCTIONS = [
     "Find a bright, quiet spot! Good lighting helps the camera see you clearly.",
@@ -194,7 +167,6 @@ BASIC_INSTRUCTIONS = [
     "Wear comfortable and fitted clothing so your body movements are clearly visible.",
     "Clear the space around you. Make sure there is enough room to move freely!",
 ]
-
 
 def show_basic_instructions(image_path="basic_instructions.png"):
     WIN = "Before You Start"
@@ -219,15 +191,16 @@ def show_basic_instructions(image_path="basic_instructions.png"):
                 ty += 26
             y += 90
 
-    # preserve aspect ratio — no stretching
-    canvas_w, canvas_h = 1280, 650
-    fitted  = fit_image_on_canvas(img, canvas_w, canvas_h, (245, 245, 245))
-    full    = np.ones((720, 1280, 3), dtype=np.uint8)
+    # fit image preserving aspect ratio — no stretching
+    canvas_w, canvas_h = 1280, 650  # leave 70px at bottom for bar
+    fitted = fit_image_on_canvas(img, canvas_w, canvas_h, (245, 245, 245))
+
+    # build full canvas with bottom bar
+    full = np.ones((720, 1280, 3), dtype=np.uint8)
     full[:] = (245, 245, 245)
     full[0:canvas_h, 0:canvas_w] = fitted
     filled_rect(full, 0, canvas_h, 1280, 720, C_PRIMARY)
     img = full
-
     cv2.imshow(WIN, img)
     cv2.waitKey(1)
     play_audio_nonblocking('basic_intro')
@@ -236,11 +209,11 @@ def show_basic_instructions(image_path="basic_instructions.png"):
     audio_keys = ['basic_1','basic_2','basic_3','basic_4','basic_5','basic_6']
     for i, key in enumerate(audio_keys, 1):
         display = img.copy()
-        filled_rect(display, 0, canvas_h, 1280, 720, C_PRIMARY)
-        progress_bar(display, 20, canvas_h+5, 1260, i/len(audio_keys), h=10)
+        filled_rect(display, 0, 648, 1280, 720, C_PRIMARY)
+        progress_bar(display, 20, 655, 1260, i/len(audio_keys), h=10)
         cv2.putText(display,
                     f"Instruction {i} of {len(audio_keys)}  press any key to skip",
-                    (40, 712), FB, 0.72, C_WHITE, 1)
+                    (40, 700), FB, 0.72, C_WHITE, 1)
         cv2.imshow(WIN, display)
         cv2.waitKey(1)
         play_audio_nonblocking(key)
@@ -253,9 +226,9 @@ def show_basic_instructions(image_path="basic_instructions.png"):
                     break
 
     final = img.copy()
-    filled_rect(final, 0, canvas_h, 1280, 720, C_PRIMARY)
-    progress_bar(final, 20, canvas_h+5, 1260, 1.0, h=10)
-    primary_button(final, 380, canvas_h+12, 900, canvas_h+58,
+    filled_rect(final, 0, 648, 1280, 720, C_PRIMARY)
+    progress_bar(final, 20, 655, 1260, 1.0, h=10)
+    primary_button(final, 380, 660, 900, 710,
                    "Press any key to continue", 0.65)
     cv2.imshow(WIN, final)
     cv2.waitKey(1)
@@ -265,6 +238,160 @@ def show_basic_instructions(image_path="basic_instructions.png"):
     cv2.destroyWindow(WIN)
     time.sleep(0.5)
     print("Basic instructions done!")
+
+
+# ─────────────────────────────────────────────────────────────────
+# SCREEN 2 — TEST INSTRUCTIONS (NO CAMERA VERIFICATION)
+# Shows full image on left, instruction text on right
+# Audio plays for each slide, user presses any key to advance
+# ─────────────────────────────────────────────────────────────────
+TEST_SLIDES_INFO = [
+    ("Step 1 of 7 — Starting position",
+     "Sit at the FRONT EDGE of the chair.\nBack straight. Feet flat on the floor.",
+     "test_1"),
+    ("Step 2 of 7 — Foot placement",
+     "Keep your feet SHOULDER-WIDTH apart.\nDo NOT move or reposition them during the test.",
+     "test_2"),
+    ("Step 3 of 7 — Arms position",
+     "Cross your arms OVER YOUR CHEST.\nKeep them there throughout the entire test.",
+     "test_3"),
+    ("Step 4 of 7 — How to stand",
+     "Stand up FULLY until hips and knees are straight.\nThen sit back down in a controlled way.",
+     "test_4"),
+    ("Step 5 of 7 — What counts as a rep",
+     "Each rep = full SIT -> STAND -> SIT.\nBoth phases must be complete to count.",
+     "test_5"),
+    ("Step 6 of 7 — Do NOT use your arms",
+     "Do NOT use your hands or arms to push off.\nThe test will STOP AUTOMATICALLY if you do.",
+     "test_6"),
+    ("Step 7 of 7 — Timer",
+     "Follow the on-screen timer.\nContinue until the 30-second test is complete.",
+     "test_7"),
+]
+
+
+def fit_image_on_canvas(img, canvas_w, canvas_h, bg_color=(245, 245, 245)):
+    """
+    Fit image onto canvas while preserving aspect ratio.
+    Adds padding around image so it is never stretched.
+    """
+    canvas = np.ones((canvas_h, canvas_w, 3), dtype=np.uint8)
+    canvas[:] = bg_color
+
+    ih, iw = img.shape[:2]
+    scale  = min(canvas_w / iw, canvas_h / ih)
+    new_w  = int(iw * scale)
+    new_h  = int(ih * scale)
+
+    resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+    # center on canvas
+    x_off = (canvas_w - new_w) // 2
+    y_off = (canvas_h - new_h) // 2
+    canvas[y_off:y_off+new_h, x_off:x_off+new_w] = resized
+    return canvas
+
+
+def _draw_info_slide(slide_img, header, body, slide_idx, total_slides, w=1280, h=720):
+    """
+    Draw fullscreen instruction slide.
+    Full image shown preserving aspect ratio.
+    Small overlay bar at bottom shows step info.
+    No split screen.
+    """
+    bar_h = 90  # bottom bar height
+
+    # canvas = light gray background
+    frame = np.ones((h, w, 3), dtype=np.uint8)
+    frame[:] = (245, 245, 245)
+
+    # ── show full instruction image, aspect-ratio preserved ───────
+    if slide_img is not None:
+        fitted = fit_image_on_canvas(slide_img, w, h - bar_h, (245, 245, 245))
+        frame[0:h-bar_h, 0:w] = fitted
+
+    # ── bottom overlay bar ────────────────────────────────────────
+    filled_rect(frame, 0, h-bar_h, w, h, C_PRIMARY)
+
+    # step label on left
+    hdr_parts = header.split(" — ")
+    step_label = hdr_parts[0] if len(hdr_parts) == 2 else header
+    sub_label  = hdr_parts[1] if len(hdr_parts) == 2 else ""
+    cv2.putText(frame, step_label,
+                (16, h-bar_h+28), FH, 0.75, C_WHITE, 1)
+    if sub_label:
+        cv2.putText(frame, sub_label,
+                    (16, h-bar_h+55), FB, 0.62, (200, 240, 200), 1)
+
+    # hint on right
+    hint = "Press any key to continue  |  waiting for audio..."
+    hw   = cv2.getTextSize(hint, FB, 0.55, 1)[0][0]
+    cv2.putText(frame, hint,
+                (w - hw - 16, h-bar_h+28), FB, 0.55, (200, 240, 200), 1)
+
+    # progress bar at very bottom
+    progress_bar(frame, 0, h-8, w,
+                 (slide_idx+1)/total_slides, h=8)
+
+    # step dots above progress bar
+    dot_y = h - bar_h//2 + 10
+    sp    = 26
+    sx    = w - total_slides*sp - 20
+    for i in range(total_slides):
+        col = C_SECONDARY if i < slide_idx else \
+              C_PRIMARY   if i == slide_idx else (100, 140, 60)
+        r   = 9 if i == slide_idx else 6
+        cv2.circle(frame, (sx + i*sp, dot_y), r, col, -1)
+        if i == slide_idx:
+            cv2.circle(frame, (sx + i*sp, dot_y), r, C_WHITE, 1)
+
+    return frame
+
+
+def show_test_instructions_display_only(image_path="test_instructions.png"):
+    """
+    Shows test instructions as a simple slideshow.
+    No camera. No position verification.
+    Each slide plays audio then waits for keypress or auto-advances.
+    """
+    WIN = "30-Second Chair Stand Test"
+    cv2.namedWindow(WIN, cv2.WINDOW_NORMAL)
+    cv2.setWindowProperty(WIN, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+
+    # load instruction image once
+    raw = cv2.imread(os.path.join(os.getcwd(), image_path))
+    if raw is None:
+        print(f"[Info] {image_path} not found — left panel will be blank.")
+
+    total = len(TEST_SLIDES_INFO)
+
+    # play intro once
+    speak('test_intro')
+
+    for idx, (header, body, audio_key) in enumerate(TEST_SLIDES_INFO):
+        # build slide frame
+        slide = _draw_info_slide(raw, header, body, idx, total)
+
+        # show slide
+        cv2.imshow(WIN, slide)
+        cv2.waitKey(1)
+
+        # play audio non-blocking, wait for finish or keypress
+        play_audio_nonblocking(audio_key)
+        skipped = wait_for_key_or_audio_end(slide, WIN, timeout=15.0)
+
+        # if not skipped, short pause then auto-advance
+        if not skipped:
+            deadline = time.time() + 1.0
+            while time.time() < deadline:
+                cv2.imshow(WIN, slide)
+                if cv2.waitKey(50) != -1:
+                    break
+
+    # final confirmation
+    speak('test_confirmed')
+    time.sleep(0.4)
+    return True
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -297,330 +424,6 @@ def play_audible_countdown(cap, window_name="30-Second Chair Stand Test"):
             cv2.putText(frame, sub, ((w-sw2[0])//2, ty+60), FB, 0.9, C_WHITE, 2)
             cv2.imshow(window_name, frame)
             cv2.waitKey(1)
-
-
-# ─────────────────────────────────────────────────────────────────
-# POSE CHECK FUNCTIONS
-# ─────────────────────────────────────────────────────────────────
-mp_pose_global = mp.solutions.pose
-
-
-def check_full_body(landmarks):
-    key_points = [
-        mp_pose_global.PoseLandmark.LEFT_SHOULDER,
-        mp_pose_global.PoseLandmark.RIGHT_SHOULDER,
-        mp_pose_global.PoseLandmark.LEFT_HIP,
-        mp_pose_global.PoseLandmark.RIGHT_HIP,
-        mp_pose_global.PoseLandmark.LEFT_KNEE,
-        mp_pose_global.PoseLandmark.RIGHT_KNEE,
-        mp_pose_global.PoseLandmark.LEFT_ANKLE,
-        mp_pose_global.PoseLandmark.RIGHT_ANKLE,
-        mp_pose_global.PoseLandmark.LEFT_FOOT_INDEX,
-        mp_pose_global.PoseLandmark.RIGHT_FOOT_INDEX,
-    ]
-    visible = sum(1 for kp in key_points
-                  if landmarks[kp.value].visibility > 0.4)
-    if visible >= len(key_points) - 2:
-        return True, "Full body detected"
-    return False, "Step back so full body is visible in camera"
-
-
-def _check_seated(landmarks):
-    lh = landmarks[mp_pose_global.PoseLandmark.LEFT_HIP.value].y
-    rh = landmarks[mp_pose_global.PoseLandmark.RIGHT_HIP.value].y
-    lk = landmarks[mp_pose_global.PoseLandmark.LEFT_KNEE.value].y
-    rk = landmarks[mp_pose_global.PoseLandmark.RIGHT_KNEE.value].y
-    hip_y  = (lh+rh)/2
-    knee_y = (lk+rk)/2
-    if knee_y > hip_y+0.02 and abs(hip_y-knee_y) < 0.20:
-        return True, "Good  sitting position detected"
-    return False, "Please sit on the front edge of the chair"
-
-
-def _check_feet_flat(landmarks):
-    Y_TOL = 0.07
-    def flat(heel, toe):
-        return abs(landmarks[heel.value].y - landmarks[toe.value].y) < Y_TOL
-    L = flat(mp_pose_global.PoseLandmark.LEFT_HEEL,
-             mp_pose_global.PoseLandmark.LEFT_FOOT_INDEX)
-    R = flat(mp_pose_global.PoseLandmark.RIGHT_HEEL,
-             mp_pose_global.PoseLandmark.RIGHT_FOOT_INDEX)
-    if L and R: return True, "Good  both feet flat on the floor"
-    if L or R:  return True, "Good  at least one foot flat"
-    return False, "Place both feet flat on floor shoulder-width apart"
-
-
-def _check_arms_crossed(landmarks):
-    try:
-        ls = landmarks[mp_pose_global.PoseLandmark.LEFT_SHOULDER.value]
-        rs = landmarks[mp_pose_global.PoseLandmark.RIGHT_SHOULDER.value]
-        lw = landmarks[mp_pose_global.PoseLandmark.LEFT_WRIST.value]
-        rw = landmarks[mp_pose_global.PoseLandmark.RIGHT_WRIST.value]
-        sw = abs(ls.x - rs.x)
-        if (math.sqrt((lw.x-rs.x)**2+(lw.y-rs.y)**2) < sw*1.2 and
-                math.sqrt((rw.x-ls.x)**2+(rw.y-ls.y)**2) < sw*1.2):
-            return True, "Good  arms crossed correctly"
-        return False, "Please cross both arms over your chest"
-    except:
-        return False, "Please cross both arms over your chest"
-
-
-def _calc_angle(a, b, c):
-    ba = (a.x-b.x, a.y-b.y, a.z-b.z)
-    bc = (c.x-b.x, c.y-b.y, c.z-b.z)
-    dot = sum(ba[i]*bc[i] for i in range(3))
-    mag = math.sqrt(sum(x**2 for x in ba))*math.sqrt(sum(x**2 for x in bc))
-    if mag == 0: return 0
-    return math.degrees(math.acos(max(min(dot/mag, 1.0), -1.0)))
-
-
-def _check_full_stand(landmarks):
-    lh = landmarks[mp_pose_global.PoseLandmark.LEFT_HIP.value]
-    lk = landmarks[mp_pose_global.PoseLandmark.LEFT_KNEE.value]
-    la = landmarks[mp_pose_global.PoseLandmark.LEFT_ANKLE.value]
-    rh = landmarks[mp_pose_global.PoseLandmark.RIGHT_HIP.value]
-    rk = landmarks[mp_pose_global.PoseLandmark.RIGHT_KNEE.value]
-    ra = landmarks[mp_pose_global.PoseLandmark.RIGHT_ANKLE.value]
-    sh_y  = (landmarks[mp_pose_global.PoseLandmark.LEFT_SHOULDER.value].y +
-             landmarks[mp_pose_global.PoseLandmark.RIGHT_SHOULDER.value].y)/2
-    hip_y = (lh.y+rh.y)/2
-    kn_y  = (lk.y+rk.y)/2
-    torso = abs(sh_y - hip_y)
-    if ((_calc_angle(lh,lk,la) > 155 or _calc_angle(rh,rk,ra) > 155) and
-            hip_y < kn_y - torso*0.25):
-        return True, "Good  fully upright position"
-    return False, "Stand up FULLY  hips and knees straight"
-
-
-def _check_no_arm_push(landmarks):
-    lw = landmarks[mp_pose_global.PoseLandmark.LEFT_WRIST.value]
-    rw = landmarks[mp_pose_global.PoseLandmark.RIGHT_WRIST.value]
-    lh = landmarks[mp_pose_global.PoseLandmark.LEFT_HIP.value]
-    rh = landmarks[mp_pose_global.PoseLandmark.RIGHT_HIP.value]
-    ls = landmarks[mp_pose_global.PoseLandmark.LEFT_SHOULDER.value]
-    rs = landmarks[mp_pose_global.PoseLandmark.RIGHT_SHOULDER.value]
-    sw = abs(ls.x - rs.x)
-    if (math.sqrt((lw.x-rs.x)**2+(lw.y-rs.y)**2) > sw*1.8 or
-            math.sqrt((rw.x-ls.x)**2+(rw.y-ls.y)**2) > sw*1.8 or
-            lw.y > lh.y or rw.y > rh.y):
-        return False, "Keep arms crossed  do NOT push off"
-    return True, "Good  arms staying crossed on chest"
-
-
-def _no_check(landmarks):
-    return True, ""
-
-
-# ── Slide definitions ─────────────────────────────────────────────
-TEST_SLIDES = [
-    ("Step 1 of 7 — Starting position",
-     "Sit at the FRONT EDGE of the chair.\nBack straight. Feet flat on floor.",
-     "Sit at the front edge of the chair with your back straight and feet flat on the floor.",
-     _check_seated, 2.0),
-    ("Step 2 of 7 — Foot placement",
-     "Keep feet SHOULDER-WIDTH apart.\nDo NOT move them during the test.",
-     "Keep your feet shoulder-width apart and do not move or reposition them during the test.",
-     _check_feet_flat, 2.0),
-    ("Step 3 of 7 — Arms position",
-     "Cross arms OVER YOUR CHEST.\nKeep them there throughout the test.",
-     "Cross your arms over your chest and keep them there throughout the test.",
-     _check_arms_crossed, 2.0),
-    ("Step 4 of 7 — How to stand",
-     "Stand up FULLY  hips and knees straight.\nSit back down in a controlled way.",
-     "Stand up fully until your hips and knees are straight, then sit back down in a controlled way.",
-     _check_full_stand, 2.0),
-    ("Step 5 of 7 — What counts as a rep",
-     "Each rep = full SIT -> STAND -> SIT.\nBoth phases must complete to count.",
-     "Each repetition must be a full sit, stand, sit, to be counted correctly.",
-     _no_check, 3.0),
-    ("Step 6 of 7 — Do NOT use your arms",
-     "Do NOT push off with hands or arms.\nTest STOPS AUTOMATICALLY if you do.",
-     "Do not use your hands or arms to push off, or the test will stop automatically.",
-     _check_no_arm_push, 2.0),
-    ("Step 7 of 7 — Timer",
-     "Follow the on-screen timer.\nContinue until 30 seconds is complete.",
-     "Follow the on-screen timer and continue until the 30-second test is complete.",
-     _no_check, 3.0),
-]
-
-
-# ─────────────────────────────────────────────────────────────────
-# SLIDE DRAW
-# ─────────────────────────────────────────────────────────────────
-def _draw_slide(frame, header, body, status_msg, status_ok,
-                held, hold_needed, slide_idx, total_slides, cached_img):
-    h, w = frame.shape[:2]
-    half = w // 2
-
-    fs_body  = max(0.38, h / 980)
-    fs_small = max(0.28, h / 1250)
-    hdr_h    = max(40, int(h * 0.07))
-    panel_h  = max(175, int(h * 0.31))
-    panel_y  = h - panel_h
-
-    # left white background
-    filled_rect(frame, 0, 0, half, h, C_BG)
-
-    # paste instruction image — fit to left panel preserving aspect ratio
-    if cached_img is not None:
-        img_area_h = panel_y
-        fitted = fit_image_on_canvas(cached_img, half, img_area_h, (245,245,245))
-        frame[0:img_area_h, 0:half] = fitted
-
-    # left header bar
-    filled_rect(frame, 0, 0, half, hdr_h, C_PRIMARY)
-    hdr_parts = header.split(" — ")
-    if len(hdr_parts) == 2:
-        cv2.putText(frame, hdr_parts[0],
-                    (10, int(hdr_h*0.50)), FH, fs_small, C_WHITE, 1)
-        cv2.putText(frame, hdr_parts[1],
-                    (10, int(hdr_h*0.88)), FB, fs_small, (200,240,200), 1)
-    else:
-        cv2.putText(frame, header,
-                    (10, int(hdr_h*0.70)), FH, fs_small, C_WHITE, 1)
-
-    # bottom panel
-    filled_rect(frame, 0, panel_y, half, h, C_SURFACE, C_BORDER, 1)
-    cv2.line(frame, (0, panel_y), (half, panel_y), C_PRIMARY, 2)
-
-    # body text — strictly clipped to left half
-    ty = panel_y + int(panel_h * 0.13)
-    max_px = half - 18
-    for ln in body.split("\n"):
-        fs = fs_body
-        while cv2.getTextSize(ln, FH, fs, 1)[0][0] > max_px and fs > 0.28:
-            fs -= 0.02
-        while cv2.getTextSize(ln, FH, fs, 1)[0][0] > max_px and len(ln) > 4:
-            ln = ln[:-1]
-        cv2.putText(frame, ln, (10, ty), FH, fs, C_TEXT, 1)
-        ty += int(panel_h * 0.17)
-
-    # status chip — strictly clipped to left half width
-    ty += 4
-    if status_msg:
-        status_chip(frame, 10, ty, status_msg, status_ok, max_w=half-14)
-
-    # hold progress bar
-    bar_y = h - int(panel_h * 0.17)
-    cv2.putText(frame, "Hold position to confirm:",
-                (10, bar_y-12), FB, fs_small, C_MUTED, 1)
-    progress_bar(frame, 10, bar_y, half-10,
-                 held/hold_needed if hold_needed > 0 else 0, h=12)
-
-    cv2.putText(frame, "SPACE=skip  Q=quit",
-                (10, h-5), FB, fs_small*0.85, C_MUTED, 1)
-
-    # right panel header
-    filled_rect(frame, half, 0, w, hdr_h, C_PRIMARY)
-    cv2.putText(frame, "Live Camera",
-                (half+10, int(hdr_h*0.50)), FH, fs_small, C_WHITE, 1)
-    cv2.putText(frame, "get into position",
-                (half+10, int(hdr_h*0.88)), FB, fs_small, (200,240,200), 1)
-
-    # divider
-    cv2.line(frame, (half, 0), (half, h), C_PRIMARY, 2)
-
-    # step dots bottom right
-    dot_y = h - 12
-    sp    = max(18, int(w * 0.018))
-    sx    = half + (half - total_slides*sp) // 2
-    for i in range(total_slides):
-        col = C_SECONDARY if i < slide_idx else \
-              C_PRIMARY   if i == slide_idx else C_BORDER
-        r   = 8 if i == slide_idx else 5
-        cv2.circle(frame, (sx+i*sp, dot_y), r, col, -1)
-        if i == slide_idx:
-            cv2.circle(frame, (sx+i*sp, dot_y), r, C_WHITE, 1)
-
-    return frame
-
-
-# ─────────────────────────────────────────────────────────────────
-# SCREEN 2 — TEST INSTRUCTIONS + LIVE CAMERA CHECK
-# ─────────────────────────────────────────────────────────────────
-def show_test_instructions(cap, pose, image_path="test_instructions.png"):
-    WIN = "30-Second Chair Stand Test"
-    cv2.namedWindow(WIN, cv2.WINDOW_NORMAL)
-    cv2.setWindowProperty(WIN, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-
-    total = len(TEST_SLIDES)
-
-    ret_t, test_f = cap.read()
-    h_f    = test_f.shape[0] if ret_t else 480
-    w_f    = test_f.shape[1] if ret_t else 640
-    half_f = w_f // 2
-    panel_h_f = max(175, int(h_f * 0.31))
-    panel_y_f = h_f - panel_h_f
-
-    # load instruction image once at FULL resolution — resize only at draw time
-    cached_img = None
-    raw = cv2.imread(os.path.join(os.getcwd(), image_path))
-    if raw is not None:
-        # store original — do NOT resize here, resize each frame in _draw_slide
-        cached_img = raw
-        print(f"[Info] Instruction image loaded: {raw.shape[1]}x{raw.shape[0]}")
-    else:
-        print(f"[Info] {image_path} not found.")
-
-    POSE_SKIP = 2
-    tick      = 0
-    last_ok   = False
-    last_msg  = "No body detected  step into camera view"
-
-    speak('test_intro')
-
-    for idx, (header, body, spoken, check_fn, hold_needed) in \
-            enumerate(TEST_SLIDES):
-
-        speak(f'test_{idx+1}')
-
-        hold_start = None
-        slide_done = False
-
-        while not slide_done:
-            ret, frame = cap.read()
-            if not ret: continue
-            frame = cv2.flip(frame, 1)
-
-            tick += 1
-            if tick % POSE_SKIP == 0:
-                rgb     = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                results = pose.process(rgb)
-                if results.pose_landmarks:
-                    last_ok, last_msg = check_fn(
-                        results.pose_landmarks.landmark)
-                else:
-                    last_ok  = False
-                    last_msg = "No body detected  step into camera view"
-
-            if last_ok:
-                if hold_start is None:
-                    hold_start = time.time()
-                held = time.time() - hold_start
-                if held >= hold_needed:
-                    slide_done = True
-            else:
-                hold_start = None
-                held = 0.0
-
-            frame = _draw_slide(
-                frame, header, body, last_msg, last_ok,
-                held if hold_start else 0.0,
-                hold_needed, idx, total, cached_img
-            )
-
-            cv2.imshow(WIN, frame)
-            key = cv2.waitKey(1) & 0xFF
-            if key == ord('q'):
-                return False
-            if key == ord(' '):
-                slide_done = True
-
-        time.sleep(0.3)
-
-    speak('test_confirmed')
-    time.sleep(0.5)
-    return True
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -672,7 +475,7 @@ def draw_warnings(frame, lighting_bad, lighting_msg,
     if lighting_bad:
         badge(f"! {lighting_msg}", C_WARNING_BG)
     if multi_people:
-        badge(f"! {people_count} people in frame  ask others to step out",
+        badge(f"! {people_count} people in frame - ask others to step out",
               C_DANGER_BG)
 
 
@@ -787,9 +590,12 @@ class SitToStandCounter:
             print(f"\nInterpretation:")
             print(f"  {result.get('interpretation','Interpretation not available.')}")
             print("\nNotes:")
-            print("  This test measures lower-body leg strength only.")
-            print("  It is a screening tool and should not be used alone.")
-            print("  Consider sharing results with a healthcare professional.")
+            print("  This test measures lower-body (leg) strength and functional mobility only.")
+            print("  It is a screening tool and should not be used alone to diagnose frailty.")
+            print("  Balance is not directly measured in this test.")
+            print("  Interpret results with caution if balance felt unsteady, hands were used,")
+            print("  or test conditions or camera setup were not ideal.")
+            print("  Consider sharing these results with a healthcare professional.")
         print("\n" + "-"*70)
         print("Reference: CDC STEADI - Stopping Elderly Accidents, Deaths & Injuries")
         print("="*70 + "\n")
@@ -964,7 +770,7 @@ class SitToStandCounter:
             title = "TEST COMPLETE" if test_status == "completed" else "TEST STOPPED"
             ts = cv2.getTextSize(title, FH, 1.4, 2)[0]
             cv2.putText(frame, title,
-                        (cx+(cw-ts[0])//2, cy+hdr_h-14),
+                        (cx + (cw-ts[0])//2, cy+hdr_h-14),
                         FH, 1.4, C_WHITE, 2)
 
             def card_text(text, y, font, scale, color, thickness=1):
@@ -986,7 +792,7 @@ class SitToStandCounter:
 
             assess = final_result.get('assessment', 'N/A')
             test_w = cv2.getTextSize("W"*40, FB, 0.72, 1)[0][0]
-            max_c  = int(40*(cw-48)/max(test_w, 1))
+            max_c  = int(40*(cw-48)/max(test_w,1))
             for ln in wrap_text(assess, max(20, max_c)):
                 lh2 = card_text(ln, ty, FB, 0.72, C_TEXT)
                 ty += lh2
@@ -1029,10 +835,15 @@ class SitToStandCounter:
     # RUN TEST
     # ─────────────────────────────────────────────────────────────
     def run_test(self):
+        """Main function — test instructions shown as display only, no verification."""
+
         age, gender = self.get_patient_info()
+
+        # Screen 1: basic instructions
         show_basic_instructions(image_path="basic_instructions.png")
 
-        while True:
+        while True:  # retry loop
+
             frame_skip  = 2
             frame_count = 0
 
@@ -1046,25 +857,17 @@ class SitToStandCounter:
                 print("No camera found in indices 0-4")
                 return
 
-            # higher resolution for instruction screen — better image quality
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH,  1280)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT,  720)
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             cv2.namedWindow("30-Second Chair Stand Test", cv2.WINDOW_NORMAL)
             cv2.setWindowProperty("30-Second Chair Stand Test",
                                   cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
-            all_passed = show_test_instructions(
-                cap, self.pose, image_path="test_instructions.png")
-            if not all_passed:
-                cap.release()
-                cv2.destroyAllWindows()
-                self.pose.close()
-                return
+            # Screen 2: test instructions — display only, no camera verification
+            show_test_instructions_display_only(
+                image_path="test_instructions.png")
 
-            # drop back to 640x480 for smooth real-time test performance
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-
+            # Starting position wait
             self.reset_test_state()
             start_auto = False
 
@@ -1102,15 +905,15 @@ class SitToStandCounter:
                 yc = 128
                 if not seated:
                     status_chip(frame, 20, yc,
-                                "Please sit properly on the chair", False, max_w=w-40)
+                                "Please sit properly on the chair", False)
                     yc += 42
                 if seated and not arms_crossed:
                     status_chip(frame, 20, yc,
-                                "Please cross your arms on your chest", False, max_w=w-40)
+                                "Please cross your arms on your chest", False)
                     yc += 42
                 if seated and not knees_visible:
                     status_chip(frame, 20, yc,
-                                "Ensure knees are visible to the camera", False, max_w=w-40)
+                                "Ensure knees are visible to the camera", False)
                     yc += 42
                 if seated and arms_crossed and knees_visible:
                     filled_rect(frame, 0, h-50, w, h, C_SECONDARY)
